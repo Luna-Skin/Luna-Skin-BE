@@ -13,9 +13,10 @@ public interface AiAnalysisRepository extends JpaRepository<AiAnalysis, Long> {
 
     // 해당 달에 이루어진 분석 조회
     @Query("select an from AiAnalysis an " +
-            "where an.todaySkin.user.userId = :currentUserId " +
-            "and an.todaySkin.logDate between :startDate and :endDate " +
-            "order by an.todaySkin.logDate")
+            "join fetch an.todaySkin ts " +
+            "where ts.user.userId = :currentUserId " +
+            "and ts.logDate between :startDate and :endDate " +
+            "order by ts.logDate")
     List<AiAnalysis> findAiAnalysisAtMonth(
             @Param("currentUserId") Long currentUserId,
             @Param("startDate") LocalDate startDate,

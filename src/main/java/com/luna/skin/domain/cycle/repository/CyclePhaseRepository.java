@@ -13,7 +13,8 @@ public interface CyclePhaseRepository extends JpaRepository<CyclePhase, Long> {
 
     // 월별 주기 단계 조회
     @Query("select cp from CyclePhase cp " +
-            "where cp.menstruationCycle.user.userId = :currentUserId " +
+            "join cp.menstruationCycle mc " +
+            "where mc.user.userId = :currentUserId " +
             "and cp.startDate <= :endDate and cp.endDate >= :startDate")
     List<CyclePhase> findByCyclePhaseAtMonth(
             @Param("currentUserId") Long currentUserId,

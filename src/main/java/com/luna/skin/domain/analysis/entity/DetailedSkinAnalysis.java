@@ -20,18 +20,18 @@ public class DetailedSkinAnalysis extends BaseTimeEntity {
     @JoinColumn(name = "analysis_id", nullable = false, unique = true)
     private AiAnalysis aiAnalysis;
 
-    @Column(name = "sebum_level")
-    private Integer sebumLevel;
+    @Column(name = "sebum")
+    private Integer sebum;
 
-    @Column(name = "redness")
-    private Integer redness;
+    @Column(name = "trouble")
+    private Integer trouble;
 
-    @Column(name = "hydration_level")
-    private Integer hydrationLevel;
+    @Column(name = "moisture")
+    private Integer moisture;
 
-    @Column(name = "pore_condition")
-    private Integer poreCondition;
+    @Column(name = "dullness")
+    private Integer dullness;
 
-    @Column(name = "skin_elasticity")
-    private Integer skinElasticity;
+    @Column(name = "elasticity")
+    private Integer elasticity;
 }

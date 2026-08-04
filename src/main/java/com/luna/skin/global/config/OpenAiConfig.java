@@ -8,7 +8,7 @@ import org.springframework.web.client.RestTemplate;
 @Configuration
 public class OpenAiConfig {
 
-  @Value("${ai.openai.api-key}")
+  @Value("${luna-skin.ai.openai.api-key}")
   private String apiKey;
 
   @Bean

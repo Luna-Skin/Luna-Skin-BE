@@ -8,9 +8,4 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CyclePhaseRepository extends JpaRepository<CyclePhase, Long> {
-
-    List<CyclePhase> findByMenstruationCycleMenstruationCycleId(Long cycleId);
-
-    Optional<CyclePhase> findByMenstruationCycleUserUserIdAndStartDateLessThanEqualAndEndDateGreaterThanEqual(
-            Long userId, LocalDate date1, LocalDate date2);
 }

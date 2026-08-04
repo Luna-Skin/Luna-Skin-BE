@@ -7,6 +7,4 @@ import java.time.LocalDate;
 import java.util.Optional;
 
 public interface TodaySkinRepository extends JpaRepository<TodaySkin, Long> {
-
-    Optional<TodaySkin> findByUserUserIdAndLogDate(Long userId, LocalDate logDate);
 }

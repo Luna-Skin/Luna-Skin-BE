@@ -7,6 +7,4 @@ import java.time.LocalDate;
 import java.util.Optional;
 
 public interface AiDailyRoutineRepository extends JpaRepository<AiDailyRoutine, Long> {
-
-    Optional<AiDailyRoutine> findByUserUserIdAndTargetDate(Long userId, LocalDate targetDate);
 }

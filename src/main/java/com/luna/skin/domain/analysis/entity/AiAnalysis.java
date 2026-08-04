@@ -24,6 +24,9 @@ public class AiAnalysis extends BaseTimeEntity {
     @Column(name = "overall_score")
     private Integer overallScore;
 
+    @Column(name = "phase_comment")
+    private String phaseComment;
+
     @Column(name = "ai_comment", columnDefinition = "TEXT")
     private String aiComment;
 }

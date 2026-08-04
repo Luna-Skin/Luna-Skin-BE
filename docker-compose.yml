@@ -17,10 +17,8 @@ services:
       - "8080:8080"
     depends_on:
       - db
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/lunaskin
-      SPRING_DATASOURCE_USERNAME: lunaskin
-      SPRING_DATASOURCE_PASSWORD: lunaskin123
+    env_file:
+      - .env
 
 volumes:
   postgres_data:

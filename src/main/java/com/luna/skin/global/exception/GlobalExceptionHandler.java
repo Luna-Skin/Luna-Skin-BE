@@ -2,6 +2,7 @@ package com.luna.skin.global.exception;
 
 
 import com.luna.skin.global.response.BaseResponse;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -31,6 +32,21 @@ public class GlobalExceptionHandler {
                 .toList();
         log.warn("ValidationException 발생: {}", fieldErrors);
 
+        return ResponseEntity
+                .status(CommonErrorCode.INVALID_REQUEST.getStatus())
+                .body(BaseResponse.fail(CommonErrorCode.INVALID_REQUEST, fieldErrors));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<BaseResponse<Object>> handleConstraintViolation(ConstraintViolationException e) {
+        List<FieldErrorDetail> fieldErrors = e.getConstraintViolations().stream()
+                .map(v -> {
+                    String field = v.getPropertyPath().toString();
+                    field = field.contains(".") ? field.substring(field.lastIndexOf('.') + 1) : field;
+                    return new FieldErrorDetail(field, v.getMessage());
+                })
+                .toList();
+        log.warn("ConstraintViolationException 발생: {}", fieldErrors);
         return ResponseEntity
                 .status(CommonErrorCode.INVALID_REQUEST.getStatus())
                 .body(BaseResponse.fail(CommonErrorCode.INVALID_REQUEST, fieldErrors));

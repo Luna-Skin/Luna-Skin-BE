@@ -28,9 +28,10 @@ public interface ChatService {
     /**
      * [채팅방 삭제 매서드]
      *
-     * @param  chatRoomId
+     * @param userId 채팅방을 삭제하려는 사용자 식별자 (소유자 검증용)
+     * @param chatRoomId 삭제할 채팅방 식별자
      */
-    boolean deleteChatRoom(Long chatRoomId);
+    boolean deleteChatRoom(Long userId, Long chatRoomId);
 
 
 

@@ -17,7 +17,7 @@ public class CycleResponse {
     private LocalDate endDate;
 
     @JsonProperty("isPredicted")
-    private boolean isPredicted;
+    private boolean predicted;
 
     // 실제 데이터
     public static CycleResponse from(CyclePhase cyclePhase) {
@@ -25,7 +25,7 @@ public class CycleResponse {
                 .phaseType(cyclePhase.getPhaseType())
                 .startDate(cyclePhase.getStartDate())
                 .endDate(cyclePhase.getEndDate())
-                .isPredicted(false)
+                .predicted(false)
                 .build();
     }
 
@@ -35,7 +35,7 @@ public class CycleResponse {
                 .phaseType(phaseType)
                 .startDate(startDate)
                 .endDate(endDate)
-                .isPredicted(true)
+                .predicted(true)
                 .build();
     }
 }

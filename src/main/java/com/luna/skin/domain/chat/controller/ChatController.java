@@ -50,4 +50,11 @@ public class ChatController {
         return ResponseEntity.status(HttpStatus.CREATED).body(BaseResponse.success(createChatRoom));
     }
 
+    @DeleteMapping("/rooms/{roomId}")
+    public ResponseEntity<BaseResponse<Boolean>> deleteChatRoom(
+            @RequestParam Long chatRoomId) {
+        chatService.deleteChatRoom(chatRoomId);
+        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(BaseResponse.success(true));
+    }
+
 }

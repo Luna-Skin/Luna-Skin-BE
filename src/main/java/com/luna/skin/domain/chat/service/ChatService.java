@@ -25,6 +25,13 @@ public interface ChatService {
      */
     CreateChatRoomResponse createChatRoom(Long userId, CreateChatRoomRequest createChatRoomRequest);
 
+    /**
+     * [채팅방 삭제 매서드]
+     *
+     * @param  chatRoomId
+     */
+    boolean deleteChatRoom(Long chatRoomId);
+
 
 
 

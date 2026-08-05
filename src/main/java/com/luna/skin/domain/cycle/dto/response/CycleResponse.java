@@ -5,7 +5,6 @@ import com.luna.skin.domain.cycle.enums.PhaseType;
 import lombok.*;
 
 import java.time.LocalDate;
-import java.util.PrimitiveIterator;
 
 @Getter
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
@@ -15,12 +14,25 @@ public class CycleResponse {
     private PhaseType phaseType;
     private LocalDate startDate;
     private LocalDate endDate;
+    private boolean isPredicted;
 
+    // 실제 데이터
     public static CycleResponse from(CyclePhase cyclePhase) {
         return CycleResponse.builder()
                 .phaseType(cyclePhase.getPhaseType())
                 .startDate(cyclePhase.getStartDate())
                 .endDate(cyclePhase.getEndDate())
+                .isPredicted(false)
+                .build();
+    }
+
+    // 예측 데이터
+    public static CycleResponse predicted(PhaseType phaseType, LocalDate startDate, LocalDate endDate) {
+        return CycleResponse.builder()
+                .phaseType(phaseType)
+                .startDate(startDate)
+                .endDate(endDate)
+                .isPredicted(true)
                 .build();
     }
 }

@@ -1,5 +1,6 @@
 package com.luna.skin.domain.cycle.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.luna.skin.domain.cycle.entity.CyclePhase;
 import com.luna.skin.domain.cycle.enums.PhaseType;
 import lombok.*;
@@ -14,6 +15,8 @@ public class CycleResponse {
     private PhaseType phaseType;
     private LocalDate startDate;
     private LocalDate endDate;
+
+    @JsonProperty("isPredicted")
     private boolean isPredicted;
 
     // 실제 데이터

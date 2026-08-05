@@ -1,6 +1,7 @@
 package com.luna.skin.domain.cycle.controller;
 
 import com.luna.skin.domain.cycle.dto.response.CycleAndAnalysisDateResponse;
+import com.luna.skin.domain.cycle.dto.response.CycleCommentResponse;
 import com.luna.skin.domain.cycle.service.CycleService;
 import com.luna.skin.global.response.BaseResponse;
 import com.luna.skin.global.security.CurrentUserProvider;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Cycle", description = "생리 주기 API")
 @Validated
 @RestController
-@RequestMapping("/api/v1/cycles")
+@RequestMapping("/api/cycles")
 @RequiredArgsConstructor
 public class CycleController {
 
@@ -42,4 +43,19 @@ public class CycleController {
                 .status(HttpStatus.OK)
                 .body(BaseResponse.success(cyclePhaseAtMonth));
     }
+
+    @Operation(summary = "주기 단계별 코멘트 조회", description = "오늘 날짜에 해당하는 사용자의 주기 단계 별 코멘트를 조회합니다.")
+    @GetMapping("/comment")
+    public ResponseEntity<BaseResponse<CycleCommentResponse>> getCycleComment() {
+
+        CycleCommentResponse cycleComment = cycleService
+                .getCycleComment(currentUserProvider.getCurrentUserId());
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(cycleComment));
+    }
+
+
+
 }

@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+import static org.springframework.data.jpa.domain.AbstractPersistable_.id;
+
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -90,6 +92,23 @@ public class ChatServiceImpl implements ChatService {
         return CreateChatRoomResponse.from(aiChatRoomRepository.save(aiChatRoom)
 
         );
+    }
+
+    @Override
+    public boolean deleteChatRoom(Long chatRoomId) {
+
+        log.info("[ChatService] 채팅방 삭제 - 시작: chatRoomId={}", chatRoomId);
+
+        if(!aiChatRoomRepository.findById(chatRoomId).isPresent()) {
+            log.error("[ChatService] 채팅방 삭제 - 에러: 해당 채팅방 식별자를 찾을수 없습니다");
+            new IllegalArgumentException("해당 채팅방 식별자를 찾을수 없습니다.");
+            return false;
+
+        }else {
+            aiChatRoomRepository.deleteById(chatRoomId);
+            log.info("[ChatService] 채팅방 삭제 - 완료");
+            return true;
+        }
     }
 
 

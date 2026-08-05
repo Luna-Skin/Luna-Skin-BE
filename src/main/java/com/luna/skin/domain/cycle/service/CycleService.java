@@ -28,7 +28,10 @@ public class CycleService {
 
         log.info("[월별 주기 단계 및 분석 여부 조회] currentUserId = {}, year = {}, month = {}", currentUserId, year, month);
 
+        // 해당 월의 1일
         LocalDate startDate = LocalDate.of(year, month, 1);
+
+        // 해당 월의 마지막일
         LocalDate endDate = YearMonth.of(year, month).atEndOfMonth();
 
         List<CyclePhase> cyclePhaseAtMonth = cyclePhaseRepository

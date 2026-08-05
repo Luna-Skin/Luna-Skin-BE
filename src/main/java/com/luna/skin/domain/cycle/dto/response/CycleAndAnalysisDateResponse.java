@@ -14,31 +14,19 @@ import java.util.stream.Stream;
 public class CycleAndAnalysisDateResponse {
 
     private List<CycleResponse> cycleResponses;
-    private List<AnalysisDateResponse> analysisDates;
+    private List<Integer> analysisDates;;
 
     public static CycleAndAnalysisDateResponse from(List<CyclePhase> cyclePhaseAtMonth, List<AiAnalysis> aiAnalysisAtMonth) {
         List<CycleResponse> cycleResponses = cyclePhaseAtMonth.stream().map(CycleResponse::from).toList();
 
-        List<AnalysisDateResponse> analysisDates = aiAnalysisAtMonth.stream().map(AnalysisDateResponse::from).toList();
+        List<Integer> analysisDates = aiAnalysisAtMonth.stream()
+                .map(an -> an.getTodaySkin().getLogDate().getDayOfMonth())
+                .toList();
 
         return CycleAndAnalysisDateResponse.builder()
                 .cycleResponses(cycleResponses)
                 .analysisDates(analysisDates)
                 .build();
-    }
-
-    @Getter
-    @AllArgsConstructor(access = AccessLevel.PRIVATE)
-    @NoArgsConstructor(access = AccessLevel.PRIVATE)
-    @Builder(access = AccessLevel.PRIVATE)
-    private static class AnalysisDateResponse {
-        private int day;
-
-        public static AnalysisDateResponse from(AiAnalysis aiAnalysis) {
-            return AnalysisDateResponse.builder()
-                    .day(aiAnalysis.getTodaySkin().getLogDate().getDayOfMonth())
-                    .build();
-        }
     }
 
 }

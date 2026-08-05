@@ -4,13 +4,17 @@ import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "ai_chat_room")
 @Getter
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 public class AiChatRoom extends BaseTimeEntity {
 
     @Id

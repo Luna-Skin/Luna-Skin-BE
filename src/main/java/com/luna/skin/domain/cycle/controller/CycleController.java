@@ -14,10 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
 
 @Tag(name = "Cycle", description = "생리 주기 API")
 @Validated
@@ -42,6 +41,18 @@ public class CycleController {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(BaseResponse.success(cyclePhaseAtMonth));
+    }
+
+    @Operation(summary = "생리 시작일 기록", description = "생리 시작일을 기록하고 주기 및 단계를 생성합니다.")
+    @PostMapping("/start")
+    public ResponseEntity<BaseResponse<Void>> startMenstruation(
+            @Parameter(description = "생리 시작일 (예: 2026-08-07)") @RequestParam LocalDate startDate
+    ) {
+        cycleService.startMenstruation(currentUserProvider.getCurrentUserId(), startDate);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(null));
     }
 
     @Operation(summary = "주기 단계별 코멘트 조회", description = "오늘 날짜에 해당하는 사용자의 주기 단계 별 코멘트를 조회합니다.")

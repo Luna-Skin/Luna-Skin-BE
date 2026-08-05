@@ -22,4 +22,13 @@ public interface CyclePhaseRepository extends JpaRepository<CyclePhase, Long> {
             @Param("endDate") LocalDate endDate
     );
 
+
+    @Query("select cp from CyclePhase cp " +
+            "where cp.menstruationCycle.user.userId = :currentUserId " +
+            "and :now between cp.startDate and cp.endDate")
+    Optional<CyclePhase> findByCyclePhaseAtNow(
+            @Param("currentUserId") Long currentUserId,
+            @Param("now") LocalDate now
+    );
+
 }

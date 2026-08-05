@@ -3,6 +3,7 @@ package com.luna.skin.domain.cycle.service;
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
 import com.luna.skin.domain.cycle.dto.response.CycleAndAnalysisDateResponse;
+import com.luna.skin.domain.cycle.dto.response.CycleCommentResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleResponse;
 import com.luna.skin.domain.cycle.entity.CyclePhase;
 import com.luna.skin.domain.cycle.entity.MenstruationCycle;
@@ -128,5 +129,22 @@ public class CycleService {
         return phases.stream()
                 .filter(p -> !p.getStartDate().isAfter(monthEnd) && !p.getEndDate().isBefore(monthStart))
                 .toList();
+    }
+
+    // 주기별 코멘트
+    public CycleCommentResponse getCycleComment(Long currentUserId) {
+
+        LocalDate now = LocalDate.now();
+        log.info("[주기별 코멘트] now = {}", now);
+
+        CyclePhase cyclePhaseAtNow = cyclePhaseRepository.findByCyclePhaseAtNow(currentUserId, now)
+                .orElseThrow(() -> {
+                    log.warn("[주기별 코멘트] 주기 정보를 찾을 수 없습니다.");
+                    return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
+                });
+
+
+        return CycleCommentResponse.of(cyclePhaseAtNow);
+
     }
 }

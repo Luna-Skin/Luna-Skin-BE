@@ -17,4 +17,12 @@ public interface MenstruationCycleRepository extends JpaRepository<MenstruationC
     Optional<MenstruationCycle> findByLatestMenstruationCycle(
             @Param("currentUserId") Long currentUserId
     );
+
+    // 사용자의 마지막 주기 하나 전 MenstruationCycle 조회
+    @Query("select mc from MenstruationCycle mc " +
+            "where mc.user.userId = :currentUserId " +
+            "order by mc.createdAt desc limit 1 offset 1")
+    Optional<MenstruationCycle> findBySecondLatestMenstruationCycle(
+            @Param("currentUserId") Long currentUserId
+    );
 }

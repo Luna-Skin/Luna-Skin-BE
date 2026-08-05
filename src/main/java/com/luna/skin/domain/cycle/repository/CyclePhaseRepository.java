@@ -1,6 +1,7 @@
 package com.luna.skin.domain.cycle.repository;
 
 import com.luna.skin.domain.cycle.entity.CyclePhase;
+import com.luna.skin.domain.cycle.entity.MenstruationCycle;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,6 +24,7 @@ public interface CyclePhaseRepository extends JpaRepository<CyclePhase, Long> {
     );
 
 
+    // 오늘 주기 단계 조회
     @Query("select cp from CyclePhase cp " +
             "where cp.menstruationCycle.user.userId = :currentUserId " +
             "and :now between cp.startDate and cp.endDate")
@@ -30,5 +32,8 @@ public interface CyclePhaseRepository extends JpaRepository<CyclePhase, Long> {
             @Param("currentUserId") Long currentUserId,
             @Param("now") LocalDate now
     );
+
+    // 해당 주기의 단계 모두 삭제
+    void deleteAllByMenstruationCycle(MenstruationCycle menstruationCycle);
 
 }

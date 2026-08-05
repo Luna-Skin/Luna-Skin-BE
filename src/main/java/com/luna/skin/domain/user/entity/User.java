@@ -27,4 +27,15 @@ public class User extends BaseTimeEntity {
 
     @Column(name = "subscription", nullable = false)
     private boolean subscription = false;
+
+    @Column(name = "default_period_duration", nullable = false)
+    private Integer defaultPeriodDuration = 4;
+
+    @Column(name = "default_cycle_length", nullable = false)
+    private Integer defaultCycleLength = 28;
+
+    public void updateCycleSettings(int periodDuration, int cycleLength) {
+        this.defaultPeriodDuration = periodDuration;
+        this.defaultCycleLength = cycleLength;
+    }
 }

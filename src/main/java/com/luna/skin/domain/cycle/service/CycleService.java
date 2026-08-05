@@ -11,6 +11,9 @@ import com.luna.skin.domain.cycle.enums.PhaseType;
 import com.luna.skin.domain.cycle.exception.CycleErrorCode;
 import com.luna.skin.domain.cycle.repository.CyclePhaseRepository;
 import com.luna.skin.domain.cycle.repository.MenstruationCycleRepository;
+import com.luna.skin.domain.user.entity.User;
+import com.luna.skin.domain.user.exception.UserErrorCode;
+import com.luna.skin.domain.user.repository.UserRepository;
 import com.luna.skin.global.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -32,6 +36,7 @@ public class CycleService {
 
     private final CyclePhaseRepository cyclePhaseRepository;
     private final MenstruationCycleRepository menstruationCycleRepository;
+    private final UserRepository userRepository;
     private final AiAnalysisRepository aiAnalysisRepository;
 
 
@@ -57,22 +62,26 @@ public class CycleService {
                     return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
                 });
 
-        int cycleLength = lastCycle.getPredictedCycleLength();
-        int periodDuration = lastCycle.getPeriodDuration();
+        // 마지마 주기 길이
+        int lastCycleLength = lastCycle.getPredictedCycleLength();
+
+        // 사용자가 설정한 주기, 기간
+        int nextCycleLength = lastCycle.getUser().getDefaultCycleLength();
+        int periodDuration = lastCycle.getUser().getDefaultPeriodDuration();
 
         // 마지막 실제 주기 다음 예측 시작일부터 월말까지 겹치는 모든 예측 주기 수집
         List<CycleResponse> predictedResponses = new ArrayList<>();
 
         // 다음 주기 시작일(생리 시작일)
-        LocalDate predictedStart = lastCycle.getCycleStartDate().plusDays(cycleLength);
+        LocalDate predictedStart = lastCycle.getCycleStartDate().plusDays(lastCycleLength);
 
         // 예측 시작일 <= 월말
         // 예측 시작일이 월 말을 넘어가면 해당 달에 속한 주기가 아님
         while (!predictedStart.isAfter(endDate)) {
             predictedResponses.addAll(
-                    calculatePredictedPhases(predictedStart, cycleLength, periodDuration, startDate, endDate)
+                    calculatePredictedPhases(predictedStart, nextCycleLength, periodDuration, startDate, endDate)
             );
-            predictedStart = predictedStart.plusDays(cycleLength);
+            predictedStart = predictedStart.plusDays(nextCycleLength);
         }
 
         // 실제 + 예측 합산 후 날짜순 정렬
@@ -145,6 +154,64 @@ public class CycleService {
 
 
         return CycleCommentResponse.of(cyclePhaseAtNow);
+    }
+
+    // 생리 시작일 기록
+    @Transactional
+    public void startMenstruation(Long currentUserId, LocalDate startDate) {
+
+        User user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> {
+                    log.warn("[생리 시작일 기록] 사용자를 찾을 수 없습니다. currentUserId = {}", currentUserId);
+                    return new CustomException(UserErrorCode.USER_NOT_FOUND);
+                });
+
+        //마지막 주기 조회
+        MenstruationCycle lastCycle = menstruationCycleRepository
+                .findByLatestMenstruationCycle(currentUserId)
+                .orElseThrow(() -> {
+                    log.warn("[생리 시작일 기록] 마지막 주기를 찾을 수 없습니다. currentUserId = {}", currentUserId);
+                    return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
+                });
+
+        
+        // 최근 주기의 종료일
+        LocalDate menstruationEndDate = lastCycle.getCycleStartDate()
+                .plusDays(lastCycle.getPeriodDuration() - 1);
+
+        // startDate <= lastCycle.endDate
+        // 기존 사이클 내에 있거나, 예정일보다 일찍 시작
+        if (!startDate.isAfter(menstruationEndDate)) {
+
+            lastCycle.updateStartDate(startDate);
+            cyclePhaseRepository.deleteAllByMenstruationCycle(lastCycle);
+            cyclePhaseRepository.saveAll(CyclePhase.of(lastCycle));
+            return;
+        }
+
+        // 새로운 주기와 이전 주기의 차이( lastCycle의 실 주기 )
+        int actualCycleLength = (int) ChronoUnit.DAYS
+                .between(lastCycle.getCycleStartDate(), startDate);
+
+        // 최소 주기 길이 검증 (생리기보다 짧으면 비정상)
+        if (actualCycleLength <= lastCycle.getPeriodDuration()) {
+            throw new CustomException(CycleErrorCode.INVALID_CYCLE_LENGTH);
+        }
+
+        // 새로운 주기가 생성 됐으므로 기존 주기 종료 및 갱신
+        lastCycle.updateActualCycle(startDate.minusDays(1), actualCycleLength);
+
+        cyclePhaseRepository.deleteAllByMenstruationCycle(lastCycle);
+        cyclePhaseRepository.saveAll(CyclePhase.of(lastCycle));
+
+        MenstruationCycle newCycle = MenstruationCycle.of(
+                user, startDate,
+                startDate.plusDays(user.getDefaultCycleLength() - 1),
+                user.getDefaultCycleLength(),
+                user.getDefaultPeriodDuration()
+                );
+        menstruationCycleRepository.save(newCycle);
+        cyclePhaseRepository.saveAll(CyclePhase.of(newCycle));
 
     }
 }

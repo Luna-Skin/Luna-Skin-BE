@@ -9,7 +9,8 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum CycleErrorCode implements ErrorCode {
     CYCLE_NOT_FOUND("CYCLE_404", "생리 주기 정보를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
-    INVALID_CYCLE_LENGTH("CYCLE_400", "생리 주기가 너무 짧습니다.", HttpStatus.BAD_REQUEST);
+    INVALID_CYCLE_LENGTH("CYCLE_400", "생리 주기가 너무 짧습니다.", HttpStatus.BAD_REQUEST),
+    INVALID_START_DATE("CYCLE_400_2", "유효하지 않은 생리 시작일입니다.", HttpStatus.BAD_REQUEST);
 
     private final String code;
     private final String message;

@@ -46,6 +46,11 @@ public class MenstruationCycle extends BaseTimeEntity {
         this.cycleStartDate = newSartDate;
     }
 
+    // 종료일 갱신
+    public void updateEndDate(LocalDate newEndDate) {
+        this.cycleEndDate = newEndDate;
+    }
+
     // 실제 주기 종료 시 갱신 (종료일, 실제 주기 길이)
     public void updateActualCycle(LocalDate endDate, int actualCycleLength) {
         this.cycleEndDate = endDate;

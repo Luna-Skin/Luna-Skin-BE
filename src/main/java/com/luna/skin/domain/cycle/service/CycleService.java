@@ -26,6 +26,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 @Service
@@ -146,14 +147,42 @@ public class CycleService {
         LocalDate now = LocalDate.now();
         log.info("[주기별 코멘트] now = {}", now);
 
-        CyclePhase cyclePhaseAtNow = cyclePhaseRepository.findByCyclePhaseAtNow(currentUserId, now)
+        // 실제 데이터 조회
+        // 실제 주기 데이터가 있다면 진짜 주기 단계에 맞는 코멘트 리턴
+        Optional<CyclePhase> cyclePhaseAtNow = cyclePhaseRepository.findByCyclePhaseAtNow(currentUserId, now);
+        if (cyclePhaseAtNow.isPresent()) {
+            return CycleCommentResponse.of(cyclePhaseAtNow.get());
+        }
+
+        // 실제 데이터 없으면 예측단계 값으로
+        log.info("[주기별 코멘트] 실제 데이터 없음, 예측으로 폴백");
+
+        MenstruationCycle lastCycle = menstruationCycleRepository
+                .findByLatestMenstruationCycle(currentUserId)
                 .orElseThrow(() -> {
-                    log.warn("[주기별 코멘트] 주기 정보를 찾을 수 없습니다.");
+                    log.warn("[주기별 코멘트] 마지막 주기를 찾을 수 없습니다. currentUserId = {}", currentUserId);
                     return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
                 });
 
+        int cycleLength = lastCycle.getUser().getDefaultCycleLength();
+        int periodDuration = lastCycle.getUser().getDefaultPeriodDuration();
+        int ovulationOffset = cycleLength / 2 - 1;
 
-        return CycleCommentResponse.of(cyclePhaseAtNow);
+        int daysIntoCycle = (int) ChronoUnit.DAYS
+                .between(lastCycle.getCycleStartDate(), now) % cycleLength;
+
+        PhaseType predictedPhase;
+        if (daysIntoCycle < periodDuration) {
+            predictedPhase = PhaseType.MENSTRUATION;
+        } else if (daysIntoCycle < ovulationOffset) {
+            predictedPhase = PhaseType.FOLLICULAR;
+        } else if (daysIntoCycle <= ovulationOffset + 2) {
+            predictedPhase = PhaseType.OVULATION;
+        } else {
+            predictedPhase = PhaseType.LUTEAL;
+        }
+
+        return CycleCommentResponse.ofPredicted(predictedPhase);
     }
 
     // 생리 시작일 기록
@@ -175,17 +204,44 @@ public class CycleService {
                 });
 
         
-        // 최근 주기의 종료일
+        // 미래 날짜 차단
+        if (startDate.isAfter(LocalDate.now())) {
+            log.warn("[생리 시작일 기록] 아직 다가오지 않은 날짜엔 시작 할 수 없습니다. ");
+            throw new CustomException(CycleErrorCode.INVALID_START_DATE);
+        }
+
+        // 이전 주기 생리기 종료일 이전으로 침범 차단
+        menstruationCycleRepository.findBySecondLatestMenstruationCycle(currentUserId)
+                .ifPresent(prevCycle -> {
+                    LocalDate prevMenstruationEnd = prevCycle.getCycleStartDate()
+                            .plusDays(prevCycle.getPeriodDuration() - 1);
+
+                    if (!startDate.isAfter(prevMenstruationEnd)) {
+                        log.warn("[생리 시작일 기록] 이전 생리 기간동안은 새로운 주기를 추가할 수 없습니다.");
+                        throw new CustomException(CycleErrorCode.INVALID_START_DATE);
+                    }
+                });
+
+        // 최근 생리 종료일
         LocalDate menstruationEndDate = lastCycle.getCycleStartDate()
                 .plusDays(lastCycle.getPeriodDuration() - 1);
 
         // startDate <= lastCycle.endDate
-        // 기존 사이클 내에 있거나, 예정일보다 일찍 시작
+        // 기존 사이클 내에서 시작일 수정
         if (!startDate.isAfter(menstruationEndDate)) {
 
             lastCycle.updateStartDate(startDate);
             cyclePhaseRepository.deleteAllByMenstruationCycle(lastCycle);
             cyclePhaseRepository.saveAll(CyclePhase.of(lastCycle));
+
+            // 시작일이 바뀌면 직전 주기의 종료일·길이도 같이 갱신
+            menstruationCycleRepository.findBySecondLatestMenstruationCycle(currentUserId)
+                    .ifPresent(prevCycle -> {
+                        int between = (int) ChronoUnit.DAYS.between(prevCycle.getCycleStartDate(), startDate);
+                        prevCycle.updateActualCycle(startDate.minusDays(1), between);
+                        cyclePhaseRepository.deleteAllByMenstruationCycle(prevCycle);
+                        cyclePhaseRepository.saveAll(CyclePhase.of(prevCycle));
+                    });
             return;
         }
 
@@ -212,6 +268,16 @@ public class CycleService {
                 );
         menstruationCycleRepository.save(newCycle);
         cyclePhaseRepository.saveAll(CyclePhase.of(newCycle));
+
+    }
+
+    public void endMenstruation(Long currentUserId, LocalDate endDate) {
+
+
+
+        // 예상 종료일보다 일찍 끝난 경우
+
+        // 예상 종료일보다 늦게 끝난 경우
 
     }
 }

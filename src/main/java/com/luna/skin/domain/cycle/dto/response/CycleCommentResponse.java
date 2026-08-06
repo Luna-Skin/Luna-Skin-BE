@@ -20,4 +20,11 @@ public class CycleCommentResponse {
                 .build();
     }
 
+    public static CycleCommentResponse ofPredicted(PhaseType phaseType) {
+        return CycleCommentResponse.builder()
+                .phaseType(phaseType)
+                .comment(phaseType.getComment())
+                .build();
+    }
+
 }

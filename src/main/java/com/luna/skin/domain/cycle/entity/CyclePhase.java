@@ -73,6 +73,8 @@ public class CyclePhase {
                         .startDate(ovulationStart.plusDays(3))
                         .endDate(start.plusDays(cycleLength - 1))
                         .build()
-        );
+        ).stream()
+                .filter(p -> !p.getEndDate().isBefore(p.getStartDate())) // 음수인 단계는 스킵
+                .toList();
     }
 }

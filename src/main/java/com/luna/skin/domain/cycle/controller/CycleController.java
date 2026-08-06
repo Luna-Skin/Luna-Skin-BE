@@ -55,6 +55,17 @@ public class CycleController {
                 .body(BaseResponse.success(null));
     }
 
+    @Operation(summary = "생리 종료일 기록", description = "생리 종료일을 기록하고 생리 기간 및 주기 단계를 갱신합니다.")
+    @PostMapping("/end")
+    public ResponseEntity<BaseResponse<Void>> endMenstruation(
+            @Parameter(description = "생리 종료일 (예: 2026-08-07)") @RequestParam LocalDate endDate
+    ) {
+        cycleService.endMenstruation(currentUserProvider.getCurrentUserId(), endDate);
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(null));
+    }
+
     @Operation(summary = "주기 단계별 코멘트 조회", description = "오늘 날짜에 해당하는 사용자의 주기 단계 별 코멘트를 조회합니다.")
     @GetMapping("/comment")
     public ResponseEntity<BaseResponse<CycleCommentResponse>> getCycleComment() {

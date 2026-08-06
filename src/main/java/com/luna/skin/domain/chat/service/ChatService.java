@@ -1,6 +1,7 @@
 package com.luna.skin.domain.chat.service;
 
 import com.luna.skin.domain.chat.dto.request.CreateChatRoomRequest;
+import com.luna.skin.domain.chat.dto.response.ChatMessageResponse;
 import com.luna.skin.domain.chat.dto.response.ChatRoomListResponse;
 import com.luna.skin.domain.chat.dto.response.CreateChatRoomResponse;
 
@@ -42,5 +43,14 @@ public interface ChatService {
      * @param content 메시지 내용
      */
     void sendMessage(Long userId, Long chatRoomId, String content);
+
+    /**
+     * [대화 내역 조회 매서드]
+     *
+     * @param userId 채팅방에 접근하려는 사용자 식별자 (소유자 검증용)
+     * @param chatRoomId 대화 내역을 조회할 채팅방 식별자
+     * @return 시간순으로 정렬된 메시지 목록
+     */
+    List<ChatMessageResponse> getChatMessages(Long userId, Long chatRoomId);
 
 }

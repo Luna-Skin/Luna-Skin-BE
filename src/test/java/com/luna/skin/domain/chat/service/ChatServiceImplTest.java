@@ -106,6 +106,47 @@ class ChatServiceImplTest {
     }
 
     @Test
+    void 대화_내역_조회_시_시간순으로_정렬된_메시지_목록을_반환한다() {
+        AiChatRoom chatRoom = AiChatRoom.builder().user(userWithId(1L)).build();
+        AiChatMessage message1 = AiChatMessage.builder().chatRoom(chatRoom).content("첫 메시지").build();
+        AiChatMessage message2 = AiChatMessage.builder().chatRoom(chatRoom).content("두번째 메시지").build();
+        when(aiChatRoomRepository.findById(10L)).thenReturn(Optional.of(chatRoom));
+        when(aiChatMessageRepository.findAllByChatRoom_ChatRoomIdOrderByCreatedAtAsc(10L))
+                .thenReturn(List.of(message1, message2));
+
+        List<ChatMessageResponse> result = chatService.getChatMessages(1L, 10L);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getContent()).isEqualTo("첫 메시지");
+        assertThat(result.get(1).getContent()).isEqualTo("두번째 메시지");
+    }
+
+    @Test
+    void 채팅방이_존재하지_않으면_대화_내역_조회를_거부한다() {
+        when(aiChatRoomRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> chatService.getChatMessages(1L, 999L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ChatErrorCode.CHAT_ROOM_NOT_FOUND);
+
+        verifyNoInteractions(aiChatMessageRepository);
+    }
+
+    @Test
+    void 채팅방_소유자가_아니면_대화_내역_조회를_거부한다() {
+        AiChatRoom chatRoom = AiChatRoom.builder().user(userWithId(1L)).build();
+        when(aiChatRoomRepository.findById(10L)).thenReturn(Optional.of(chatRoom));
+
+        assertThatThrownBy(() -> chatService.getChatMessages(2L, 10L))
+                .isInstanceOf(CustomException.class)
+                .extracting(e -> ((CustomException) e).getErrorCode())
+                .isEqualTo(ChatErrorCode.CHAT_ROOM_ACCESS_DENIED);
+
+        verifyNoInteractions(aiChatMessageRepository);
+    }
+
+    @Test
     void AI_응답에_실패해도_유저_메시지는_저장되고_에러가_브로드캐스트된다() {
         AiChatRoom chatRoom = AiChatRoom.builder().user(userWithId(1L)).build();
         when(aiChatRoomRepository.findById(10L)).thenReturn(Optional.of(chatRoom));

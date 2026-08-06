@@ -161,4 +161,32 @@ public class ChatServiceImpl implements ChatService {
         log.info("[ChatService] 메시지 전송 - 완료: chatRoomId={}", chatRoomId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<ChatMessageResponse> getChatMessages(Long userId, Long chatRoomId) {
+
+        log.info("[ChatService] 대화 내역 조회 - 시작: chatRoomId={}", chatRoomId);
+
+        AiChatRoom aiChatRoom = aiChatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> {
+                    log.error("[ChatService] 대화 내역 조회 - 에러: 해당 채팅방 식별자를 찾을 수 없습니다. chatRoomId={}", chatRoomId);
+                    return new CustomException(ChatErrorCode.CHAT_ROOM_NOT_FOUND);
+                });
+
+        if (!aiChatRoom.getUser().getUserId().equals(userId)) {
+            log.error("[ChatService] 대화 내역 조회 - 에러: 본인 소유의 채팅방이 아닙니다. userId={}, chatRoomId={}", userId, chatRoomId);
+            throw new CustomException(ChatErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        }
+
+        List<ChatMessageResponse> messages = aiChatMessageRepository
+                .findAllByChatRoom_ChatRoomIdOrderByCreatedAtAsc(chatRoomId)
+                .stream()
+                .map(ChatMessageResponse::from)
+                .toList();
+
+        log.info("[ChatService] 대화 내역 조회 - 완료: chatRoomId={}, 메시지 개수={}", chatRoomId, messages.size());
+
+        return messages;
+    }
+
 }

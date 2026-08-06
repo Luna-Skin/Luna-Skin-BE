@@ -1,6 +1,7 @@
 package com.luna.skin.domain.chat.controller;
 
 import com.luna.skin.domain.chat.dto.request.CreateChatRoomRequest;
+import com.luna.skin.domain.chat.dto.response.ChatMessageResponse;
 import com.luna.skin.domain.chat.dto.response.ChatRoomListResponse;
 import com.luna.skin.domain.chat.dto.response.CreateChatRoomResponse;
 import com.luna.skin.domain.chat.service.ChatService;
@@ -18,7 +19,7 @@ import java.util.List;
 
 @Tag(name = "Chat", description = "AI 채팅방 API")
 @RestController
-@RequestMapping("/api/chats")
+@RequestMapping("/api/chat")
 @RequiredArgsConstructor
 public class ChatController {
 
@@ -67,6 +68,22 @@ public class ChatController {
     ) {
         chatService.deleteChatRoom(currentUserProvider.getCurrentUserId(), roomId);
         return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(true));
+    }
+
+    @GetMapping("/rooms/{roomId}/messages")
+    @Operation(
+            summary = "대화 내역 조회",
+            description = "본인 소유의 채팅방에 대한 AI_Chat_Message 목록을 시간순으로 반환합니다. 본인 소유가 아니면 403이 반환됩니다. "
+                    + "X-USER-ID 헤더에 유저 ID를 입력해 테스트하세요. 예: X-USER-ID: 1"
+    )
+    public ResponseEntity<BaseResponse<List<ChatMessageResponse>>> getChatMessages(
+            @Parameter(description = "대화 내역을 조회할 채팅방 식별자", example = "1")
+            @PathVariable Long roomId
+    ) {
+        List<ChatMessageResponse> messages =
+                chatService.getChatMessages(currentUserProvider.getCurrentUserId(), roomId);
+
+        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(messages));
     }
 
 }

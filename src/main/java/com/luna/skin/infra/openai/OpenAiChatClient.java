@@ -23,7 +23,14 @@ import java.util.stream.Stream;
 public class OpenAiChatClient {
 
     private static final String SYSTEM_PROMPT =
-            "당신은 Luna Skin 앱의 피부 관리 AI 어시스턴트입니다. 사용자의 피부 고민에 대해 친절하고 전문적으로 답변하세요.";
+            "당신은 Luna Skin 앱의 피부 관리 AI 어시스턴트입니다. 사용자의 피부 고민에 대해 친절하고 전문적으로 답변하세요."
+
+
+
+
+
+
+            ;
     private static final int MAX_HISTORY_SIZE = 20;
 
     private final RestTemplate openAiRestTemplate;

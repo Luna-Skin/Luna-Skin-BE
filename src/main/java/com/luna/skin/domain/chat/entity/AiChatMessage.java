@@ -4,13 +4,17 @@ import com.luna.skin.domain.chat.enums.MessageRole;
 import com.luna.skin.domain.chat.enums.MessageType;
 import com.luna.skin.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "ai_chat_message")
 @Getter
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 public class AiChatMessage extends BaseTimeEntity {
 
     @Id

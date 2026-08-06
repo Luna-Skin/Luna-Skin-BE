@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Luna Skin - WebSocket 채팅 테스트</title>
+  <script src="/webjars/sockjs-client/1.5.1/sockjs.min.js"></script>
+  <script src="/webjars/stomp-websocket/2.3.4/stomp.min.js"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    fieldset { margin-bottom: 16px; }
+    label { display: inline-block; width: 90px; }
+    input { width: 200px; padding: 4px; }
+    button { padding: 6px 14px; margin-left: 8px; }
+    #status { font-weight: bold; }
+    #status.connected { color: green; }
+    #status.disconnected { color: #999; }
+    #status.error { color: red; }
+    #messages { list-style: none; padding: 0; margin-top: 16px; }
+    #messages li { padding: 8px 12px; margin-bottom: 6px; border-radius: 8px; max-width: 80%; }
+    #messages li.USER { background: #dbeafe; margin-left: auto; text-align: right; }
+    #messages li.AI { background: #f3f4f6; }
+    #messages li.SYSTEM { background: transparent; color: #999; font-size: 12px; text-align: center; }
+    .role { font-size: 11px; color: #666; display: block; margin-bottom: 2px; }
+    #sendForm { display: flex; margin-top: 12px; }
+    #sendForm input { flex: 1; }
+  </style>
+</head>
+<body>
+  <h2>Luna Skin - WebSocket 채팅 테스트</h2>
+  <p>상태: <span id="status" class="disconnected">연결 안 됨</span></p>
+
+  <fieldset>
+    <legend>1. 연결 (/ws/chat)</legend>
+    <p>미리 REST API(POST /api/chats/rooms, X-USER-ID 헤더)로 채팅방을 만들어서 userId/chatRoomId를 준비하세요.</p>
+    <div><label>User ID</label><input id="userId" type="number" value="1"></div>
+    <div style="margin-top: 8px;"><label>Chat Room ID</label><input id="chatRoomId" type="number" value="1"></div>
+    <button id="connectBtn" onclick="connect()">연결</button>
+    <button id="disconnectBtn" onclick="disconnect()" disabled>연결 종료</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. 메시지 전송 (/pub/chat/send)</legend>
+    <form id="sendForm" onsubmit="return sendMessage(event)">
+      <input id="content" type="text" placeholder="메시지 입력" disabled>
+      <button type="submit" id="sendBtn" disabled>전송</button>
+    </form>
+  </fieldset>
+
+  <ul id="messages"></ul>
+
+  <script>
+    let stompClient = null;
+
+    function setStatus(text, className) {
+      const el = document.getElementById('status');
+      el.textContent = text;
+      el.className = className;
+    }
+
+    function addLog(text) {
+      const li = document.createElement('li');
+      li.className = 'SYSTEM';
+      li.textContent = text;
+      document.getElementById('messages').appendChild(li);
+    }
+
+    function addMessage(message) {
+      const li = document.createElement('li');
+      li.className = message.role;
+      const roleLabel = document.createElement('span');
+      roleLabel.className = 'role';
+      roleLabel.textContent = message.role + ' · ' + new Date(message.createdAt).toLocaleTimeString();
+      li.appendChild(roleLabel);
+      li.appendChild(document.createTextNode(message.content));
+      document.getElementById('messages').appendChild(li);
+      li.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function connect() {
+      const userId = document.getElementById('userId').value;
+      const chatRoomId = document.getElementById('chatRoomId').value;
+
+      const socket = new SockJS('/ws/chat');
+      stompClient = Stomp.over(socket);
+
+      setStatus('연결 중...', 'disconnected');
+
+      stompClient.connect(
+        { 'X-USER-ID': userId, 'X-CHAT-ROOM-ID': chatRoomId },
+        function () {
+          setStatus('연결됨 (userId=' + userId + ', chatRoomId=' + chatRoomId + ')', 'connected');
+          addLog('연결 성공');
+
+          stompClient.subscribe('/topic/chat/' + chatRoomId, function (frame) {
+            const payload = JSON.parse(frame.body);
+            if (payload.type === 'ERROR') {
+              addLog('AI 오류: ' + payload.message);
+            } else {
+              addMessage(payload);
+            }
+          });
+
+          document.getElementById('connectBtn').disabled = true;
+          document.getElementById('disconnectBtn').disabled = false;
+          document.getElementById('content').disabled = false;
+          document.getElementById('sendBtn').disabled = false;
+        },
+        function (error) {
+          const reason = (error && error.headers && error.headers.message) || error;
+          setStatus('연결 거부: ' + reason, 'error');
+          addLog('연결 실패: ' + reason);
+        }
+      );
+    }
+
+    function disconnect() {
+      if (stompClient !== null) {
+        stompClient.disconnect(function () {
+          addLog('연결 종료');
+        });
+      }
+      setStatus('연결 안 됨', 'disconnected');
+      document.getElementById('connectBtn').disabled = false;
+      document.getElementById('disconnectBtn').disabled = true;
+      document.getElementById('content').disabled = true;
+      document.getElementById('sendBtn').disabled = true;
+    }
+
+    function sendMessage(event) {
+      event.preventDefault();
+      const input = document.getElementById('content');
+      if (!input.value.trim()) return false;
+
+      stompClient.send('/pub/chat/send', {}, JSON.stringify({ content: input.value }));
+      input.value = '';
+      return false;
+    }
+  </script>
+</body>
+</html>

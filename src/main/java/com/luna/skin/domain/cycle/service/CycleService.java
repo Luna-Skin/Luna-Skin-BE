@@ -211,52 +211,46 @@ public class CycleService {
                     return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
                 });
 
-        
 
+        Optional<MenstruationCycle> targetMenstruation = cyclePhaseRepository
+                .findByMenstruationCycleWithStartDate(currentUserId, startDate, PhaseType.MENSTRUATION);
 
-        // 이전 주기 생리기 종료일 이전으로 침범 차단
-        menstruationCycleRepository.findBySecondLatestMenstruationCycle(currentUserId)
-                .ifPresent(prevCycle -> {
-                    LocalDate prevMenstruationEnd = prevCycle.getCycleStartDate()
-                            .plusDays(prevCycle.getPeriodDuration() - 1);
+        // 기존에 있던 주기의 시작일을 변경 하는 경우
+        if(targetMenstruation.isPresent()) {
+            MenstruationCycle menstruationCycle = targetMenstruation.get();
 
-                    if (!startDate.isAfter(prevMenstruationEnd)) {
-                        log.warn("[생리 시작일 기록] 이전 생리 기간동안은 새로운 주기를 추가할 수 없습니다.");
-                        throw new CustomException(CycleErrorCode.INVALID_START_DATE);
-                    }
-                });
+            // 시작일 갱신
+            menstruationCycle.updateStartDate(startDate);
 
-        // 최근 생리 종료일
-        LocalDate menstruationEndDate = lastCycle.getCycleStartDate()
-                .plusDays(lastCycle.getPeriodDuration() - 1);
-
-        // startDate <= lastCycle.endDate
-        // 기존 사이클 내에서 시작일 수정
-        if (!startDate.isAfter(menstruationEndDate)) {
-
-            lastCycle.updateStartDate(startDate);
-            cyclePhaseRepository.deleteAllByMenstruationCycle(lastCycle);
-            cyclePhaseRepository.saveAll(CyclePhase.of(lastCycle));
-
-            // 시작일이 바뀌면 직전 주기의 종료일·길이도 같이 갱신
-            menstruationCycleRepository.findBySecondLatestMenstruationCycle(currentUserId)
+            // target 주기 이전의 가장 최근 주기 업데이트
+            menstruationCycleRepository.findByMenstruationCycleBeforeTarget(currentUserId, startDate, menstruationCycle.getMenstruationCycleId())
                     .ifPresent(prevCycle -> {
-                        int between = (int) ChronoUnit.DAYS.between(prevCycle.getCycleStartDate(), startDate);
+
+                        int between = (int) ChronoUnit.DAYS
+                                .between(prevCycle.getCycleStartDate(), startDate);
+
+                        // 주기 길이 갱신
                         prevCycle.updateActualCycle(startDate.minusDays(1), between);
+                        // 주기 단계 재계산
                         cyclePhaseRepository.deleteAllByMenstruationCycle(prevCycle);
                         cyclePhaseRepository.saveAll(CyclePhase.of(prevCycle));
                     });
             return;
         }
 
+
         // 새로운 주기와 이전 주기의 차이( lastCycle의 실 주기 )
         int actualCycleLength = (int) ChronoUnit.DAYS
                 .between(lastCycle.getCycleStartDate(), startDate);
 
-        // 최소 주기 길이 검증 (생리기보다 짧으면 비정상)
-        if (actualCycleLength <= lastCycle.getPeriodDuration()) {
-            throw new CustomException(CycleErrorCode.INVALID_CYCLE_LENGTH);
-        }
+
+        // 새로운 주기 생성
+        MenstruationCycle newCycle = MenstruationCycle.of(
+                user, startDate,
+                startDate.plusDays(user.getDefaultCycleLength() - 1),
+                user.getDefaultCycleLength(),
+                user.getDefaultPeriodDuration()
+        );
 
         // 새로운 주기가 생성 됐으므로 기존 주기 종료 및 갱신
         lastCycle.updateActualCycle(startDate.minusDays(1), actualCycleLength);
@@ -264,15 +258,9 @@ public class CycleService {
         cyclePhaseRepository.deleteAllByMenstruationCycle(lastCycle);
         cyclePhaseRepository.saveAll(CyclePhase.of(lastCycle));
 
-        MenstruationCycle newCycle = MenstruationCycle.of(
-                user, startDate,
-                startDate.plusDays(user.getDefaultCycleLength() - 1),
-                user.getDefaultCycleLength(),
-                user.getDefaultPeriodDuration()
-                );
+        // 저장
         menstruationCycleRepository.save(newCycle);
         cyclePhaseRepository.saveAll(CyclePhase.of(newCycle));
-
     }
 
     @Transactional

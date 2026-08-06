@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 @Entity
 @Table(name = "menstruation_cycle")
@@ -44,6 +45,13 @@ public class MenstruationCycle extends BaseTimeEntity {
     // 시작일 갱신
     public void updateStartDate(LocalDate newSartDate) {
         this.cycleStartDate = newSartDate;
+    }
+
+    // 생리 기간 재 계산
+    public void updatePeriodDuration(LocalDate menstruationEndDate) {
+        long daysBetween = ChronoUnit.DAYS.between(this.cycleStartDate,
+                menstruationEndDate);
+        this.periodDuration = (int) daysBetween + 1;
     }
 
     // 종료일 갱신

@@ -189,6 +189,14 @@ public class CycleService {
     @Transactional
     public void startMenstruation(Long currentUserId, LocalDate startDate) {
 
+        log.info("[생리 시작일 기록] currentUserId = {}, startDate = {}", currentUserId, startDate);
+
+        // 미래 날짜 차단
+        if (startDate.isAfter(LocalDate.now())) {
+            log.warn("[생리 시작일 기록] 아직 다가오지 않은 날짜엔 시작 할 수 없습니다. ");
+            throw new CustomException(CycleErrorCode.INVALID_START_DATE);
+        }
+
         User user = userRepository.findById(currentUserId)
                 .orElseThrow(() -> {
                     log.warn("[생리 시작일 기록] 사용자를 찾을 수 없습니다. currentUserId = {}", currentUserId);
@@ -204,11 +212,7 @@ public class CycleService {
                 });
 
         
-        // 미래 날짜 차단
-        if (startDate.isAfter(LocalDate.now())) {
-            log.warn("[생리 시작일 기록] 아직 다가오지 않은 날짜엔 시작 할 수 없습니다. ");
-            throw new CustomException(CycleErrorCode.INVALID_START_DATE);
-        }
+
 
         // 이전 주기 생리기 종료일 이전으로 침범 차단
         menstruationCycleRepository.findBySecondLatestMenstruationCycle(currentUserId)
@@ -271,13 +275,34 @@ public class CycleService {
 
     }
 
+    @Transactional
     public void endMenstruation(Long currentUserId, LocalDate endDate) {
 
+        log.info("[생리 종료일 기록] currentUserId = {}, endDate = {}", currentUserId, endDate);
 
+        // 미래시점 차단
+        if (endDate.isAfter(LocalDate.now())) {
+            log.warn("[생리 종료일 기록] 아직 다가오지 않은 날짜엔 시작 할 수 없습니다. ");
+            throw new CustomException(CycleErrorCode.INVALID_START_DATE);
+        }
 
-        // 예상 종료일보다 일찍 끝난 경우
+        // 종료일과 짝인 시작일 주기 조회
+        MenstruationCycle targetMenstruation = menstruationCycleRepository.findByMenstruationCycleWithEndDate(currentUserId, endDate)
+                .orElseThrow(() -> {
+                    log.warn("[생리 종료일 기록] 시작일을 먼저 입력해야합니다.");
+                    return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
+                });
 
-        // 예상 종료일보다 늦게 끝난 경우
+        // 시작일 = 종료일
+        if(targetMenstruation.getCycleStartDate().isEqual(endDate)) {
+            log.warn("[생리 종료일 기록] 시작일과 종료일은 같을 수 없습니다. endDate = {}", endDate);
+            throw new CustomException(CycleErrorCode.START_AND_END_DATE_CANNOT_BE_SAME);
+        }
 
+        // 종료일 갱신으로 인한 생리기간 업데이트
+        targetMenstruation.updatePeriodDuration(endDate);
+        // 주기 단계 갱신
+        cyclePhaseRepository.deleteAllByMenstruationCycle(targetMenstruation);
+        cyclePhaseRepository.saveAll(CyclePhase.of(targetMenstruation));
     }
 }

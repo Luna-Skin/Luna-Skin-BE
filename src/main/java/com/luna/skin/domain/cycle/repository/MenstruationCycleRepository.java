@@ -36,4 +36,16 @@ public interface MenstruationCycleRepository extends JpaRepository<MenstruationC
     Optional<MenstruationCycle> findByMenstruationCycleWithEndDate(
             @Param("currentUserId") Long currentUserId,
             @Param("endDate")LocalDate endDate);
+
+    // targetStartDate 와 가장 가까운 이전 주기 조회
+    @Query("select mc from MenstruationCycle mc " +
+            "where mc.user.userId = :currentUserId " +
+            "and mc.cycleStartDate <= :targetStartDate " +
+            "and mc.menstruationCycleId != :targetId " +
+            "order by mc.cycleStartDate desc limit 1")
+    Optional<MenstruationCycle> findByMenstruationCycleBeforeTarget(
+            @Param("currentUserId") Long currentUserId,
+            @Param("targetStartDate") LocalDate targetStartDate,
+            @Param("targetId") Long targetId
+    );
 }

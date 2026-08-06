@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -48,7 +49,7 @@ public class CyclePhase {
         // 해당 주기의 배란 시작일
         LocalDate ovulationStart = start.plusDays((long) cycleLength / 2 - 1);
 
-        return List.of(
+        List<CyclePhase> candidates = List.of(
                 CyclePhase.builder()
                         .menstruationCycle(cycle)
                         .phaseType(PhaseType.MENSTRUATION)
@@ -73,8 +74,25 @@ public class CyclePhase {
                         .startDate(ovulationStart.plusDays(3))
                         .endDate(start.plusDays(cycleLength - 1))
                         .build()
-        ).stream()
-                .filter(p -> !p.getEndDate().isBefore(p.getStartDate())) // 음수인 단계는 스킵
-                .toList();
+        );
+
+        List<CyclePhase> result = new ArrayList<>();
+        LocalDate prevEnd = null;
+        for (CyclePhase phase : candidates) {
+            // 이전 단계와 겹치면 이전 단계 종료 다음 날로 시작일 지정
+            LocalDate effectiveStart = (prevEnd != null && !phase.getStartDate().isAfter(prevEnd))
+                    ? prevEnd.plusDays(1) : phase.getStartDate();
+
+            // 지정 후에도 종료일보다 늦으면 스킵
+            if (phase.getEndDate().isBefore(effectiveStart)) continue;
+            result.add(CyclePhase.builder()
+                    .menstruationCycle(phase.getMenstruationCycle())
+                    .phaseType(phase.getPhaseType())
+                    .startDate(effectiveStart)
+                    .endDate(phase.getEndDate())
+                    .build());
+            prevEnd = phase.getEndDate();
+        }
+        return result;
     }
 }

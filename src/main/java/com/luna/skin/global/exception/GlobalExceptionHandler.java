@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.List;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @Slf4j
 @RestControllerAdvice
@@ -52,6 +53,14 @@ public class GlobalExceptionHandler {
                 .body(BaseResponse.fail(CommonErrorCode.INVALID_REQUEST, fieldErrors));
     }
 
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<BaseResponse<Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException e) {
+        log.warn("파일 크기 초과: {}", e.getMessage());
+        return ResponseEntity
+            .status(CommonErrorCode.FILE_TOO_LARGE.getStatus())
+            .body(BaseResponse.fail(CommonErrorCode.FILE_TOO_LARGE));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<BaseResponse<Object>> handleException(Exception e) {
         log.error("UnhandledException 발생: {}", e.getMessage(), e);
@@ -65,4 +74,5 @@ public class GlobalExceptionHandler {
             return new FieldErrorDetail(fieldError.getField(), fieldError.getDefaultMessage());
         }
     }
+
 }

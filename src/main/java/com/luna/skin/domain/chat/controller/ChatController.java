@@ -66,7 +66,7 @@ public class ChatController {
             @PathVariable Long roomId
     ) {
         chatService.deleteChatRoom(currentUserProvider.getCurrentUserId(), roomId);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(BaseResponse.success(true));
+        return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(true));
     }
 
 }

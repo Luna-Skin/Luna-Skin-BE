@@ -80,7 +80,7 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public boolean deleteChatRoom(Long userId, Long chatRoomId) {
+    public void deleteChatRoom(Long userId, Long chatRoomId) {
 
         log.info("[ChatService] 채팅방 삭제 - 시작: chatRoomId={}", chatRoomId);
 
@@ -98,8 +98,6 @@ public class ChatServiceImpl implements ChatService {
         aiChatRoomRepository.delete(aiChatRoom);
 
         log.info("[ChatService] 채팅방 삭제 - 완료");
-
-        return true;
     }
 
 }

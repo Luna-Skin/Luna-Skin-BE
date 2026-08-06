@@ -33,7 +33,14 @@ public interface ChatService {
      */
     void deleteChatRoom(Long userId, Long chatRoomId);
 
-
-
+    /**
+     * [메시지 전송 매서드]
+     * 유저 메시지를 저장 후 브로드캐스트하고, OpenAI 응답을 받아 저장 후 브로드캐스트한다.
+     *
+     * @param userId 메시지를 보내는 사용자 식별자 (소유자 검증용)
+     * @param chatRoomId 메시지를 보낼 채팅방 식별자
+     * @param content 메시지 내용
+     */
+    void sendMessage(Long userId, Long chatRoomId, String content);
 
 }

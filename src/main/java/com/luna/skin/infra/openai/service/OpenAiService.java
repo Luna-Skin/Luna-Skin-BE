@@ -1,5 +1,6 @@
 package com.luna.skin.infra.openai.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
 import com.luna.skin.global.exception.CustomException;
@@ -21,6 +22,10 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class OpenAiService {
+
+  private static final List<String> SCORE_FIELDS =
+      List.of("overall_score", "trouble", "sebum", "dullness", "moisture", "elasticity");
+  private static final List<String> COMMENT_FIELDS = List.of("ai_comment", "phase_comment");
 
   private final RestTemplate openAiRestTemplate;
   private final ObjectMapper objectMapper;
@@ -54,10 +59,33 @@ public class OpenAiService {
           endpoint + "/chat/completions", requestBody, Map.class);
       String content = (String) ((Map) ((Map) ((List) ((Map) response).get("choices")).get(0))
           .get("message")).get("content");
-      return objectMapper.readValue(content, OpenAiSkinAnalysisResult.class);
+
+      JsonNode root = objectMapper.readTree(content);
+      validateGptResponse(root);
+      return objectMapper.treeToValue(root, OpenAiSkinAnalysisResult.class);
     } catch (Exception e) {
       log.error("GPT 분석 실패: {}", e.getMessage(), e);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
+    }
+  }
+
+  private void validateGptResponse(JsonNode root) {
+    for (String field : SCORE_FIELDS) {
+      JsonNode node = root.get(field);
+      if (node == null || node.isNull() || !node.isIntegralNumber()) {
+        throw new IllegalArgumentException(field + " 필드가 없거나 정수가 아닙니다.");
+      }
+      int value = node.intValue();
+      if (value < 0 || value > 100) {
+        throw new IllegalArgumentException(field + " 값이 0~100 범위를 벗어났습니다: " + value);
+      }
+    }
+
+    for (String field : COMMENT_FIELDS) {
+      JsonNode node = root.get(field);
+      if (node == null || node.isNull() || !node.isTextual() || node.asText().isBlank()) {
+        throw new IllegalArgumentException(field + " 필드가 없거나 비어있습니다.");
+      }
     }
   }
 
@@ -68,14 +96,12 @@ public class OpenAiService {
     }
 
     try {
-      // 저장 서비스가 관리하는 업로드 루트만 허용 (심볼릭 링크 등까지 실제 경로로 해석)
       Path uploadRoot = Path.of(baseDir).toRealPath();
       Path imagePath = uploadRoot
           .resolve(imageUrl.substring("/files/".length()))
           .normalize()
           .toRealPath();
 
-      // ../ 등으로 업로드 루트를 벗어나는 경로("/files/../../.env" 등)는 차단
       if (!imagePath.startsWith(uploadRoot) || !Files.isRegularFile(imagePath)) {
         log.error("업로드 루트를 벗어난 imageUrl: {}", imageUrl);
         throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
@@ -90,7 +116,6 @@ public class OpenAiService {
     }
   }
 
-  // 확장자 기반으로 MIME 타입 결정, 알 수 없는 확장자는 OS가 감지한 형식으로 폴백
   private String resolveMimeType(Path imagePath) throws IOException {
     String fileName = imagePath.getFileName().toString().toLowerCase();
     if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {

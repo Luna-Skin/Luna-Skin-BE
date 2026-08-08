@@ -47,8 +47,7 @@ public class AnalysisService {
   private final OpenAiService openAiService;
   private final StorageProperties storageProperties;
 
-  // OpenAI 호출(analyze) 중에도 프록시를 거쳐 별도 트랜잭션으로 커밋되도록 자기 자신을 지연 주입.
-  // (같은 클래스 안에서 this.reserve(...)처럼 직접 호출하면 프록시를 우회해 @Transactional이 무시됨)
+  // OpenAI 호출(analyze) 중에도 프록시를 거쳐 별도 트랜잭션으로 커밋되도록 자기 자신을 지연 주입
   @Autowired
   @Lazy
   private AnalysisService self;
@@ -115,8 +114,6 @@ public class AnalysisService {
     try {
       todaySkinRepository.save(todaySkin);
     } catch (DataIntegrityViolationException e) {
-      // 사전 조회(findByUserUserIdAndLogDate)를 동시 요청이 함께 통과한 경우,
-      // uq_today_skin_user_date 유니크 제약조건 위반이 발생한다. 500 대신 409로 매핑한다.
       throw new CustomException(AnalysisErrorCode.ALREADY_ANALYZED);
     }
 

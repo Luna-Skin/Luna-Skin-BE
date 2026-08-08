@@ -62,12 +62,29 @@ public class OpenAiService {
   }
 
   private String convertToBase64(String imageUrl, String baseDir) {
-    String relativePath = imageUrl.replaceFirst("^/files", baseDir);
+    if (imageUrl == null || !imageUrl.startsWith("/files/")) {
+      log.error("허용되지 않은 imageUrl 형식: {}", imageUrl);
+      throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
+    }
+
     try {
-      byte[] bytes = Files.readAllBytes(Path.of(relativePath).toAbsolutePath());
+      // 저장 서비스가 관리하는 업로드 루트만 허용 (심볼릭 링크 등까지 실제 경로로 해석)
+      Path uploadRoot = Path.of(baseDir).toRealPath();
+      Path imagePath = uploadRoot
+          .resolve(imageUrl.substring("/files/".length()))
+          .normalize()
+          .toRealPath();
+
+      // ../ 등으로 업로드 루트를 벗어나는 경로("/files/../../.env" 등)는 차단
+      if (!imagePath.startsWith(uploadRoot) || !Files.isRegularFile(imagePath)) {
+        log.error("업로드 루트를 벗어난 imageUrl: {}", imageUrl);
+        throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
+      }
+
+      byte[] bytes = Files.readAllBytes(imagePath);
       return Base64.getEncoder().encodeToString(bytes);
     } catch (IOException e) {
-      log.error("이미지 파일 읽기 실패: {}", relativePath);
+      log.error("이미지 파일 읽기 실패: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
   }

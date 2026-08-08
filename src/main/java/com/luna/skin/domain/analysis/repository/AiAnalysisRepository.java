@@ -23,7 +23,6 @@ public interface AiAnalysisRepository extends JpaRepository<AiAnalysis, Long> {
         @Param("endDate") LocalDate endDate
     );
 
-
     // 기간 내에 가장 최근 투데이 스킨을 조회
     @Query("select an from AiAnalysis an " +
             "join fetch an.todaySkin ts " +
@@ -35,4 +34,17 @@ public interface AiAnalysisRepository extends JpaRepository<AiAnalysis, Long> {
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
             );
+
+    Optional<AiAnalysis> findByTodaySkinUserUserIdAndTodaySkinLogDate(Long userId, LocalDate logDate);
+
+    @Query("select an from AiAnalysis an join fetch an.todaySkin ts where ts.user.userId = :userId")
+    List<AiAnalysis> findAllByUserIdWithTodaySkin(@Param("userId") Long userId);
+
+    @Query("select an from AiAnalysis an join fetch an.todaySkin ts " +
+        "where ts.user.userId = :userId " +
+        "and ts.logDate between :startDate and :endDate")
+    List<AiAnalysis> findAllByUserIdAndLogDateBetween(
+        @Param("userId") Long userId,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate);
 }

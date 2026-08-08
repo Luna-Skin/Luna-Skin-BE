@@ -1,7 +1,9 @@
 package com.luna.skin.domain.analysis.controller;
 
 import com.luna.skin.domain.analysis.dto.request.SkinAnalysisRequest;
+import com.luna.skin.domain.analysis.dto.response.HomeSkinStatusResponse;
 import com.luna.skin.domain.analysis.dto.response.ImageUploadResponse;
+import com.luna.skin.domain.analysis.dto.response.LifestyleInsightResponse;
 import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse;
 import com.luna.skin.domain.analysis.service.AnalysisService;
 import com.luna.skin.global.response.BaseResponse;
@@ -13,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,7 +42,7 @@ public class AnalysisController {
     return ResponseEntity.ok(BaseResponse.success(analysisService.uploadImage(userId, image)));
   }
 
-  @Operation(summary = "일별 피부 분석", description = "생활습관 데이터와 사진으로 AI 피부 분석")
+  @Operation(summary = "일별 피부 분석", description = "오늘의 생활 기록과 사진으로 AI 피부 분석하는 API")
   @PostMapping("/{date}")
   public ResponseEntity<BaseResponse<SkinAnalysisResponse>> analyze(
       @PathVariable String date,
@@ -49,5 +52,22 @@ public class AnalysisController {
             currentUserProvider.getCurrentUserId(),
             LocalDate.parse(date),
             request)));
+  }
+
+  @Operation(summary = "일별 피부 분석 조회", description = "특정 날짜의 피부 분석 기록을 조회하는 API")
+  @GetMapping("/{date}")
+  public ResponseEntity<BaseResponse<SkinAnalysisResponse>> getAnalysisByDate(
+      @PathVariable String date) {
+    return ResponseEntity.ok(BaseResponse.success(
+        analysisService.getAnalysisByDate(
+            currentUserProvider.getCurrentUserId(),
+            LocalDate.parse(date))));
+  }
+
+  @Operation(summary = "홈 화면 오늘의 피부 상태", description = "오늘 피부 기록 summary를 반환하는 API")
+  @GetMapping("/today")
+  public ResponseEntity<BaseResponse<HomeSkinStatusResponse>> getTodaySkinStatus() {
+    return ResponseEntity.ok(BaseResponse.success(
+        analysisService.getTodaySkinStatus(currentUserProvider.getCurrentUserId())));
   }
 }

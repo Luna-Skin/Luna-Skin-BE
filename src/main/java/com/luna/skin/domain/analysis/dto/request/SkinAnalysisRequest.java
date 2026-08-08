@@ -5,6 +5,7 @@ import com.luna.skin.domain.skin.enums.DietType;
 import com.luna.skin.domain.skin.enums.ExerciseTime;
 import com.luna.skin.domain.skin.enums.SkinStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -20,6 +21,7 @@ public class SkinAnalysisRequest {
 
   @Schema(description = "업로드된 사진 URL", example = "/files/analysis/uuid.png")
   @JsonProperty("imageUrl")
+  @NotBlank(message = "imageUrl은 필수입니다.")
   private String imageUrl;
 
   @Schema(description = "수면 시간 (시간)", example = "7")

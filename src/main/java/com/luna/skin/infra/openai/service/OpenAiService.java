@@ -1,5 +1,6 @@
 package com.luna.skin.infra.openai.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
 import com.luna.skin.global.exception.CustomException;
@@ -22,6 +23,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class OpenAiService {
 
+  private static final List<String> SCORE_FIELDS =
+      List.of("overall_score", "trouble", "sebum", "dullness", "moisture", "elasticity");
+  private static final List<String> COMMENT_FIELDS = List.of("ai_comment", "phase_comment");
+
   private final RestTemplate openAiRestTemplate;
   private final ObjectMapper objectMapper;
 
@@ -35,8 +40,8 @@ public class OpenAiService {
     String prompt = buildPrompt(phaseType);
 
     // URL → 실제 파일 경로 변환 후 base64 인코딩
-    String base64Image = convertToBase64(imageUrl, baseDir);
-    String dataUrl = "data:image/png;base64," + base64Image;
+    EncodedImage image = convertToBase64(imageUrl, baseDir);
+    String dataUrl = "data:" + image.mimeType() + ";base64," + image.base64Data();
 
     Map<String, Object> requestBody = Map.of(
         "model", model,
@@ -54,23 +59,77 @@ public class OpenAiService {
           endpoint + "/chat/completions", requestBody, Map.class);
       String content = (String) ((Map) ((Map) ((List) ((Map) response).get("choices")).get(0))
           .get("message")).get("content");
-      return objectMapper.readValue(content, OpenAiSkinAnalysisResult.class);
+
+      JsonNode root = objectMapper.readTree(content);
+      validateGptResponse(root);
+      return objectMapper.treeToValue(root, OpenAiSkinAnalysisResult.class);
     } catch (Exception e) {
       log.error("GPT 분석 실패: {}", e.getMessage(), e);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
   }
 
-  private String convertToBase64(String imageUrl, String baseDir) {
-    String relativePath = imageUrl.replaceFirst("^/files", baseDir);
+  private void validateGptResponse(JsonNode root) {
+    for (String field : SCORE_FIELDS) {
+      JsonNode node = root.get(field);
+      if (node == null || node.isNull() || !node.isIntegralNumber()) {
+        throw new IllegalArgumentException(field + " 필드가 없거나 정수가 아닙니다.");
+      }
+      int value = node.intValue();
+      if (value < 0 || value > 100) {
+        throw new IllegalArgumentException(field + " 값이 0~100 범위를 벗어났습니다: " + value);
+      }
+    }
+
+    for (String field : COMMENT_FIELDS) {
+      JsonNode node = root.get(field);
+      if (node == null || node.isNull() || !node.isTextual() || node.asText().isBlank()) {
+        throw new IllegalArgumentException(field + " 필드가 없거나 비어있습니다.");
+      }
+    }
+  }
+
+  private EncodedImage convertToBase64(String imageUrl, String baseDir) {
+    if (imageUrl == null || !imageUrl.startsWith("/files/")) {
+      log.error("허용되지 않은 imageUrl 형식: {}", imageUrl);
+      throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
+    }
+
     try {
-      byte[] bytes = Files.readAllBytes(Path.of(relativePath).toAbsolutePath());
-      return Base64.getEncoder().encodeToString(bytes);
+      Path uploadRoot = Path.of(baseDir).toRealPath();
+      Path imagePath = uploadRoot
+          .resolve(imageUrl.substring("/files/".length()))
+          .normalize()
+          .toRealPath();
+
+      if (!imagePath.startsWith(uploadRoot) || !Files.isRegularFile(imagePath)) {
+        log.error("업로드 루트를 벗어난 imageUrl: {}", imageUrl);
+        throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
+      }
+
+      byte[] bytes = Files.readAllBytes(imagePath);
+      String base64Data = Base64.getEncoder().encodeToString(bytes);
+      return new EncodedImage(base64Data, resolveMimeType(imagePath));
     } catch (IOException e) {
-      log.error("이미지 파일 읽기 실패: {}", relativePath);
+      log.error("이미지 파일 읽기 실패: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
   }
+
+  private String resolveMimeType(Path imagePath) throws IOException {
+    String fileName = imagePath.getFileName().toString().toLowerCase();
+    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+      return "image/jpeg";
+    }
+    if (fileName.endsWith(".png")) {
+      return "image/png";
+    }
+
+    String detected = Files.probeContentType(imagePath);
+    return detected != null ? detected : "image/png";
+  }
+
+  private record EncodedImage(String base64Data, String mimeType) {}
 
   private String buildPrompt(String phaseType) {
     return """

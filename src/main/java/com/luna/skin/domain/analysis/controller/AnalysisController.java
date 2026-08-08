@@ -7,6 +7,7 @@ import com.luna.skin.domain.analysis.service.AnalysisService;
 import com.luna.skin.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -42,7 +43,7 @@ public class AnalysisController {
   @PostMapping("/{date}")
   public ResponseEntity<BaseResponse<SkinAnalysisResponse>> analyze(
       @PathVariable String date,
-      @RequestBody SkinAnalysisRequest request) {
+      @Valid @RequestBody SkinAnalysisRequest request) {
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(BaseResponse.success("COMMON_201", "요청에 성공했습니다.", analysisService.analyze(
             currentUserProvider.getCurrentUserId(),

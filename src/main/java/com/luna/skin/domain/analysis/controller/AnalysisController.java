@@ -41,7 +41,7 @@ public class AnalysisController {
     return ResponseEntity.ok(BaseResponse.success(analysisService.uploadImage(userId, image)));
   }
 
-  @Operation(summary = "일별 피부 분석", description = "생활습관 데이터와 사진으로 AI 피부 분석")
+  @Operation(summary = "일별 피부 분석", description = "오늘의 생활 기록과 사진으로 AI 피부 분석하는 API")
   @PostMapping("/{date}")
   public ResponseEntity<BaseResponse<SkinAnalysisResponse>> analyze(
       @PathVariable String date,
@@ -51,5 +51,12 @@ public class AnalysisController {
             currentUserProvider.getCurrentUserId(),
             LocalDate.parse(date),
             request)));
+  }
+
+  @Operation(summary = "홈 화면 오늘의 피부 상태", description = "오늘 피부 기록 summary를 반환하는 API")
+  @GetMapping("/today")
+  public ResponseEntity<BaseResponse<HomeSkinStatusResponse>> getTodaySkinStatus() {
+    return ResponseEntity.ok(BaseResponse.success(
+        analysisService.getTodaySkinStatus(currentUserProvider.getCurrentUserId())));
   }
 }

@@ -21,7 +21,7 @@ import com.luna.skin.global.exception.CommonErrorCode;
 import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.global.storage.ImageStorageService;
 import com.luna.skin.infra.openai.OpenAiSkinAnalysisResult;
-import com.luna.skin.infra.openai.service.OpenAiService;
+import com.luna.skin.infra.openai.service.OpenAiAnalysisService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -46,7 +46,7 @@ public class AnalysisService {
   private final DetailedSkinAnalysisRepository detailedSkinAnalysisRepository;
   private final CyclePhaseRepository cyclePhaseRepository;
   private final UserRepository userRepository;
-  private final OpenAiService openAiService;
+  private final OpenAiAnalysisService openAiAnalysisService;
   private final StorageProperties storageProperties;
 
   @Autowired
@@ -77,7 +77,7 @@ public class AnalysisService {
 
     OpenAiSkinAnalysisResult gptResult;
     try {
-      gptResult = openAiService.analyzeSkin(
+      gptResult = openAiAnalysisService.analyzeSkin(
           request.getImageUrl(), reservation.phaseType(), storageProperties.baseDir());
     } catch (RuntimeException e) {
       self.cancelReservation(reservation.todaySkinId());

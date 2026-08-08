@@ -21,7 +21,7 @@ import java.util.Map;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class OpenAiService {
+public class OpenAiAnalysisService {
 
   private static final List<String> SCORE_FIELDS =
       List.of("overall_score", "trouble", "sebum", "dullness", "moisture", "elasticity");

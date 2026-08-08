@@ -1,6 +1,7 @@
 package com.luna.skin.domain.analysis.controller;
 
 import com.luna.skin.domain.analysis.dto.response.LifestyleInsightResponse;
+import com.luna.skin.domain.analysis.dto.response.TroubleTimelineResponse;
 import com.luna.skin.domain.analysis.service.InsightService;
 import com.luna.skin.global.response.BaseResponse;
 import com.luna.skin.global.security.CurrentUserProvider;
@@ -28,4 +29,10 @@ public class InsightController {
         insightService.getLifestyleInsight(currentUserProvider.getCurrentUserId())));
   }
 
+  @Operation(summary = "트러블 지수 타임라인")
+  @GetMapping("/trouble-timeline")
+  public ResponseEntity<BaseResponse<TroubleTimelineResponse>> getTroubleTimeline() {
+    return ResponseEntity.ok(BaseResponse.success(
+        insightService.getTroubleTimeline(currentUserProvider.getCurrentUserId())));
+  }
 }

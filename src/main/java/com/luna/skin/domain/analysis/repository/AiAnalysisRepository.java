@@ -26,4 +26,12 @@ public interface AiAnalysisRepository extends JpaRepository<AiAnalysis, Long> {
 
     @Query("select an from AiAnalysis an join fetch an.todaySkin ts where ts.user.userId = :userId")
     List<AiAnalysis> findAllByUserIdWithTodaySkin(@Param("userId") Long userId);
+
+    @Query("select an from AiAnalysis an join fetch an.todaySkin ts " +
+        "where ts.user.userId = :userId " +
+        "and ts.logDate between :startDate and :endDate")
+    List<AiAnalysis> findAllByUserIdAndLogDateBetween(
+        @Param("userId") Long userId,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate);
 }

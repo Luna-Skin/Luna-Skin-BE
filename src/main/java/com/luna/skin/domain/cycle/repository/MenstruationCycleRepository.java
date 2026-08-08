@@ -48,4 +48,7 @@ public interface MenstruationCycleRepository extends JpaRepository<MenstruationC
             @Param("targetStartDate") LocalDate targetStartDate,
             @Param("targetId") Long targetId
     );
+
+    @Query("select mc from MenstruationCycle mc where mc.user.userId = :userId order by mc.cycleStartDate asc")
+    List<MenstruationCycle> findAllByUserId(@Param("userId") Long userId);
 }

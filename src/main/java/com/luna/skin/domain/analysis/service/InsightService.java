@@ -1,13 +1,18 @@
 package com.luna.skin.domain.analysis.service;
 
 import com.luna.skin.domain.analysis.dto.response.LifestyleInsightResponse;
+import com.luna.skin.domain.analysis.dto.response.TroubleTimelineResponse;
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.analysis.entity.DetailedSkinAnalysis;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
 import com.luna.skin.domain.analysis.repository.DetailedSkinAnalysisRepository;
+import com.luna.skin.domain.cycle.entity.MenstruationCycle;
+import com.luna.skin.domain.cycle.repository.MenstruationCycleRepository;
 import com.luna.skin.domain.skin.enums.ExerciseTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -28,6 +33,100 @@ public class InsightService {
 
   private final AiAnalysisRepository aiAnalysisRepository;
   private final DetailedSkinAnalysisRepository detailedSkinAnalysisRepository;
+  private final MenstruationCycleRepository menstruationCycleRepository;
+
+  @Cacheable(value = "troubleTimeline", key = "#userId")
+  public TroubleTimelineResponse getTroubleTimeline(Long userId) {
+    List<MenstruationCycle> cycles = menstruationCycleRepository.findAllByUserId(userId);
+
+    if (cycles.isEmpty()) {
+      return TroubleTimelineResponse.builder()
+          .cycleCount(0)
+          .patternComment("생리 주기 데이터가 없어요.")
+          .troubleTimeline(List.of())
+          .build();
+    }
+
+    Map<Integer, List<Integer>> troubleByDay = new HashMap<>();
+    for (int d = -14; d <= 14; d++) {
+      troubleByDay.put(d, new ArrayList<>());
+    }
+
+    LocalDate minDate = cycles.get(0).getCycleStartDate().minusDays(14);
+    LocalDate maxDate = cycles.get(cycles.size() - 1).getCycleStartDate().plusDays(14);
+
+    List<AiAnalysis> allAnalyses = aiAnalysisRepository
+        .findAllByUserIdAndLogDateBetween(userId, minDate, maxDate);
+
+    Map<LocalDate, DetailedSkinAnalysis> detailByDate = detailedSkinAnalysisRepository
+        .findAllByAiAnalysisIn(allAnalyses)
+        .stream()
+        .collect(Collectors.toMap(
+            d -> d.getAiAnalysis().getTodaySkin().getLogDate(), d -> d));
+
+    for (MenstruationCycle cycle : cycles) {
+      LocalDate startDate = cycle.getCycleStartDate();
+      for (int d = -14; d <= 14; d++) {
+        LocalDate targetDate = startDate.plusDays(d);
+        DetailedSkinAnalysis detail = detailByDate.get(targetDate);
+        if (detail != null && detail.getTrouble() != null) {
+          troubleByDay.get(d).add(detail.getTrouble());
+        }
+      }
+    }
+
+    List<TroubleTimelineResponse.TroublePoint> timeline = new ArrayList<>();
+    for (int d = -14; d <= 14; d++) {
+      List<Integer> scores = troubleByDay.get(d);
+      Double avg = scores.isEmpty() ? null :
+          scores.stream().mapToInt(Integer::intValue).average().orElse(0);
+      timeline.add(TroubleTimelineResponse.TroublePoint.builder()
+          .dayFromStart(d)
+          .troubleIndex(avg)
+          .build());
+    }
+
+    double overallAvg = timeline.stream()
+        .map(TroubleTimelineResponse.TroublePoint::getTroubleIndex)
+        .filter(Objects::nonNull)
+        .mapToDouble(Double::doubleValue)
+        .average().orElse(0);
+
+    int peakStart = 0, peakEnd = 0, maxLen = 0;
+    int curStart = 0, curLen = 0;
+    for (TroubleTimelineResponse.TroublePoint p : timeline) {
+      if (p.getTroubleIndex() != null && p.getTroubleIndex() > overallAvg) {
+        if (curLen == 0) curStart = p.getDayFromStart();
+        curLen++;
+        if (curLen > maxLen) {
+          maxLen = curLen;
+          peakStart = curStart;
+          peakEnd = p.getDayFromStart();
+        }
+      } else {
+        curLen = 0;
+      }
+    }
+
+    String patternComment = maxLen > 0
+        ? "생리 D" + (peakStart >= 0 ? "+" + peakStart : peakStart) + "부터 트러블이 증가해요."
+        : "아직 트러블 패턴을 분석하기에 데이터가 부족해요.";
+
+    TroubleTimelineResponse.PeakRange peakRange = maxLen > 0
+        ? TroubleTimelineResponse.PeakRange.builder()
+        .startDay(peakStart)
+        .endDay(peakEnd)
+        .label("트러블 집중 구간")
+        .build()
+        : null;
+
+    return TroubleTimelineResponse.builder()
+        .cycleCount(cycles.size())
+        .patternComment(patternComment)
+        .troubleTimeline(timeline)
+        .peakRange(peakRange)
+        .build();
+  }
 
   @Cacheable(value = "lifestyleInsight", key = "#userId")
   public LifestyleInsightResponse getLifestyleInsight(Long userId) {

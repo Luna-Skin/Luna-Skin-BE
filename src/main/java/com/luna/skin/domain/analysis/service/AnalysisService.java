@@ -45,8 +45,10 @@ public class AnalysisService {
   private final OpenAiService openAiService;
   private final StorageProperties storageProperties;
 
-  public ImageUploadResponse uploadImage(MultipartFile image) {
+  public ImageUploadResponse uploadImage(Long userId, MultipartFile image) {
     validateImageFile(image);
+
+    log.info("userId: {} 사진 업로드", userId);
 
     String imageUrl = imageStorageService.store(image, "analysis");
     return ImageUploadResponse.builder()

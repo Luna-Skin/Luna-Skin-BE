@@ -35,8 +35,8 @@ public class OpenAiService {
     String prompt = buildPrompt(phaseType);
 
     // URL → 실제 파일 경로 변환 후 base64 인코딩
-    String base64Image = convertToBase64(imageUrl, baseDir);
-    String dataUrl = "data:image/png;base64," + base64Image;
+    EncodedImage image = convertToBase64(imageUrl, baseDir);
+    String dataUrl = "data:" + image.mimeType() + ";base64," + image.base64Data();
 
     Map<String, Object> requestBody = Map.of(
         "model", model,
@@ -61,7 +61,7 @@ public class OpenAiService {
     }
   }
 
-  private String convertToBase64(String imageUrl, String baseDir) {
+  private EncodedImage convertToBase64(String imageUrl, String baseDir) {
     if (imageUrl == null || !imageUrl.startsWith("/files/")) {
       log.error("허용되지 않은 imageUrl 형식: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
@@ -82,12 +82,29 @@ public class OpenAiService {
       }
 
       byte[] bytes = Files.readAllBytes(imagePath);
-      return Base64.getEncoder().encodeToString(bytes);
+      String base64Data = Base64.getEncoder().encodeToString(bytes);
+      return new EncodedImage(base64Data, resolveMimeType(imagePath));
     } catch (IOException e) {
       log.error("이미지 파일 읽기 실패: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
   }
+
+  // 확장자 기반으로 MIME 타입 결정, 알 수 없는 확장자는 OS가 감지한 형식으로 폴백
+  private String resolveMimeType(Path imagePath) throws IOException {
+    String fileName = imagePath.getFileName().toString().toLowerCase();
+    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+      return "image/jpeg";
+    }
+    if (fileName.endsWith(".png")) {
+      return "image/png";
+    }
+
+    String detected = Files.probeContentType(imagePath);
+    return detected != null ? detected : "image/png";
+  }
+
+  private record EncodedImage(String base64Data, String mimeType) {}
 
   private String buildPrompt(String phaseType) {
     return """

@@ -40,7 +40,7 @@ public class TodaySkin extends BaseTimeEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "diet_type")
-    private DietType dietType;
+    private String dietType; // "DAIRY,CAFFEINE,SPICY_FOOD" 형태로 저장
 
     @Enumerated(EnumType.STRING)
     @Column(name = "exercise_time")

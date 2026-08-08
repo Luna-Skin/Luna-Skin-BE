@@ -1,5 +1,5 @@
 package com.luna.skin.domain.skin.enums;
 
 public enum DietType {
-    VEGETABLE_FOCUSED, FAST_FOOD, SPICY_FOOD, BALANCED, ALCOHOL
+    DAIRY, FRUIT, SPICY_FOOD, CAFFEINE, HIGH_FAT, SUGAR, SODA, ALCOHOL
 }

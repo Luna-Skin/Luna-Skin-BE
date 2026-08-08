@@ -29,7 +29,7 @@ public class TroubleTimelineResponse {
     private int dayFromStart;
 
     @Schema(description = "트러블 지수", example = "72")
-    private double troubleIndex;
+    private Double troubleIndex;
   }
 
   @Getter

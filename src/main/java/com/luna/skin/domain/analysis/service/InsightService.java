@@ -10,7 +10,6 @@ import com.luna.skin.domain.cycle.entity.MenstruationCycle;
 import com.luna.skin.domain.cycle.repository.MenstruationCycleRepository;
 import com.luna.skin.domain.skin.enums.ExerciseTime;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -48,34 +47,38 @@ public class InsightService {
           .build();
     }
 
-    //trouble 점수 누적
     Map<Integer, List<Integer>> troubleByDay = new HashMap<>();
     for (int d = -14; d <= 14; d++) {
       troubleByDay.put(d, new ArrayList<>());
     }
 
+    LocalDate minDate = cycles.get(0).getCycleStartDate().minusDays(14);
+    LocalDate maxDate = cycles.get(cycles.size() - 1).getCycleStartDate().plusDays(14);
+
+    List<AiAnalysis> allAnalyses = aiAnalysisRepository
+        .findAllByUserIdAndLogDateBetween(userId, minDate, maxDate);
+
+    Map<LocalDate, DetailedSkinAnalysis> detailByDate = detailedSkinAnalysisRepository
+        .findAllByAiAnalysisIn(allAnalyses)
+        .stream()
+        .collect(Collectors.toMap(
+            d -> d.getAiAnalysis().getTodaySkin().getLogDate(), d -> d));
+
     for (MenstruationCycle cycle : cycles) {
       LocalDate startDate = cycle.getCycleStartDate();
       for (int d = -14; d <= 14; d++) {
         LocalDate targetDate = startDate.plusDays(d);
-        aiAnalysisRepository.findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, targetDate)
-            .ifPresent(ai -> {
-              detailedSkinAnalysisRepository.findByAiAnalysis(ai)
-                  .ifPresent(detail -> {
-                    if (detail.getTrouble() != null) {
-                      troubleByDay.get((int) ChronoUnit.DAYS.between(startDate, targetDate))
-                          .add(detail.getTrouble());
-                    }
-                  });
-            });
+        DetailedSkinAnalysis detail = detailByDate.get(targetDate);
+        if (detail != null && detail.getTrouble() != null) {
+          troubleByDay.get(d).add(detail.getTrouble());
+        }
       }
     }
 
-    // 평균 계산
     List<TroubleTimelineResponse.TroublePoint> timeline = new ArrayList<>();
     for (int d = -14; d <= 14; d++) {
       List<Integer> scores = troubleByDay.get(d);
-      double avg = scores.isEmpty() ? 0 :
+      Double avg = scores.isEmpty() ? null :
           scores.stream().mapToInt(Integer::intValue).average().orElse(0);
       timeline.add(TroubleTimelineResponse.TroublePoint.builder()
           .dayFromStart(d)
@@ -83,16 +86,16 @@ public class InsightService {
           .build());
     }
 
-    // 전체 평균
     double overallAvg = timeline.stream()
-        .mapToDouble(TroubleTimelineResponse.TroublePoint::getTroubleIndex)
+        .map(TroubleTimelineResponse.TroublePoint::getTroubleIndex)
+        .filter(Objects::nonNull)
+        .mapToDouble(Double::doubleValue)
         .average().orElse(0);
 
-    //평균보다 높은 연속 구간 중 가장 긴 구간
     int peakStart = 0, peakEnd = 0, maxLen = 0;
     int curStart = 0, curLen = 0;
     for (TroubleTimelineResponse.TroublePoint p : timeline) {
-      if (p.getTroubleIndex() > overallAvg) {
+      if (p.getTroubleIndex() != null && p.getTroubleIndex() > overallAvg) {
         if (curLen == 0) curStart = p.getDayFromStart();
         curLen++;
         if (curLen > maxLen) {
@@ -106,7 +109,7 @@ public class InsightService {
     }
 
     String patternComment = maxLen > 0
-        ? "생리 D" + peakStart + "부터 트러블이 증가해요."
+        ? "생리 D" + (peakStart >= 0 ? "+" + peakStart : peakStart) + "부터 트러블이 증가해요."
         : "아직 트러블 패턴을 분석하기에 데이터가 부족해요.";
 
     TroubleTimelineResponse.PeakRange peakRange = maxLen > 0

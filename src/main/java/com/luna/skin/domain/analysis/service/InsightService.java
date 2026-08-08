@@ -48,7 +48,7 @@ public class InsightService {
           .build();
     }
 
-    // dayFromStart별 trouble 점수 누적
+    //trouble 점수 누적
     Map<Integer, List<Integer>> troubleByDay = new HashMap<>();
     for (int d = -14; d <= 14; d++) {
       troubleByDay.put(d, new ArrayList<>());
@@ -88,7 +88,7 @@ public class InsightService {
         .mapToDouble(TroubleTimelineResponse.TroublePoint::getTroubleIndex)
         .average().orElse(0);
 
-    // peakRange: 평균보다 높은 연속 구간 중 가장 긴 구간
+    //평균보다 높은 연속 구간 중 가장 긴 구간
     int peakStart = 0, peakEnd = 0, maxLen = 0;
     int curStart = 0, curLen = 0;
     for (TroubleTimelineResponse.TroublePoint p : timeline) {

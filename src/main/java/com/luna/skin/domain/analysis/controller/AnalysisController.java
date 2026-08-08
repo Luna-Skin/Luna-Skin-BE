@@ -53,10 +53,21 @@ public class AnalysisController {
             request)));
   }
 
+  @Operation(summary = "일별 피부 분석 조회", description = "특정 날짜의 피부 분석 기록을 조회하는 API")
+  @GetMapping("/{date}")
+  public ResponseEntity<BaseResponse<SkinAnalysisResponse>> getAnalysisByDate(
+      @PathVariable String date) {
+    return ResponseEntity.ok(BaseResponse.success(
+        analysisService.getAnalysisByDate(
+            currentUserProvider.getCurrentUserId(),
+            LocalDate.parse(date))));
+  }
+
   @Operation(summary = "홈 화면 오늘의 피부 상태", description = "오늘 피부 기록 summary를 반환하는 API")
   @GetMapping("/today")
   public ResponseEntity<BaseResponse<HomeSkinStatusResponse>> getTodaySkinStatus() {
     return ResponseEntity.ok(BaseResponse.success(
         analysisService.getTodaySkinStatus(currentUserProvider.getCurrentUserId())));
   }
+
 }

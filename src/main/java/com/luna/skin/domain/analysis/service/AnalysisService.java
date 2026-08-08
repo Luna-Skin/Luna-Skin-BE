@@ -155,25 +155,24 @@ public class AnalysisService {
         .build();
     detailedSkinAnalysisRepository.save(detail);
 
-    return SkinAnalysisResponse.builder()
-        .analysisId(aiAnalysis.getAnalysisId())
-        .date(date.toString())
-        .overallScore(gptResult.getOverallScore())
-        .skinStatus(skinStatusLabel.toLabel())
-        .cyclePhase(phaseType)
-        .phaseComment(gptResult.getPhaseComment())
-        .aiComment(gptResult.getAiComment())
-        .detailedMetrics(SkinAnalysisResponse.DetailedMetrics.builder()
-            .trouble(gptResult.getTrouble())
-            .sebum(gptResult.getSebum())
-            .dullness(gptResult.getDullness())
-            .moisture(gptResult.getMoisture())
-            .elasticity(gptResult.getElasticity())
-            .build())
-        .build();
+    return toSkinAnalysisResponse(aiAnalysis, detail, phaseType);
   }
 
   private record ReservationResult(Long todaySkinId, String phaseType) {}
+
+  public SkinAnalysisResponse getAnalysisByDate(Long userId, LocalDate date) {
+    AiAnalysis aiAnalysis = aiAnalysisRepository.findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, date)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+
+    DetailedSkinAnalysis detail = detailedSkinAnalysisRepository.findByAiAnalysis(aiAnalysis)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+
+    String phaseType = cyclePhaseRepository.findByCyclePhaseAtNow(userId, date)
+        .map(cp -> cp.getPhaseType().name())
+        .orElse("UNKNOWN");
+
+    return toSkinAnalysisResponse(aiAnalysis, detail, phaseType);
+  }
 
   public HomeSkinStatusResponse getTodaySkinStatus(Long userId) {
     return aiAnalysisRepository.findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, LocalDate.now())
@@ -200,5 +199,28 @@ public class AnalysisService {
     if (!List.of("jpg", "jpeg", "png").contains(ext)) {
       throw new CustomException(AnalysisErrorCode.INVALID_FILE_TYPE);
     }
+  }
+
+  private SkinAnalysisResponse toSkinAnalysisResponse(AiAnalysis aiAnalysis, DetailedSkinAnalysis detail, String phaseType) {
+    TodaySkin todaySkin = aiAnalysis.getTodaySkin();
+    SkinStatusLabel label = aiAnalysis.getSkinStatusLabel();
+
+    return SkinAnalysisResponse.builder()
+        .analysisId(aiAnalysis.getAnalysisId())
+        .date(todaySkin.getLogDate().toString())
+        .imageUrl(todaySkin.getImageUrl())
+        .overallScore(aiAnalysis.getOverallScore())
+        .skinStatus(label != null ? label.toLabel() : "모름")
+        .cyclePhase(phaseType)
+        .phaseComment(aiAnalysis.getPhaseComment())
+        .aiComment(aiAnalysis.getAiComment())
+        .detailedMetrics(SkinAnalysisResponse.DetailedMetrics.builder()
+            .trouble(detail.getTrouble())
+            .sebum(detail.getSebum())
+            .dullness(detail.getDullness())
+            .moisture(detail.getMoisture())
+            .elasticity(detail.getElasticity())
+            .build())
+        .build();
   }
 }

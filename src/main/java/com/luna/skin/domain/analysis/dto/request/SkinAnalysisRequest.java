@@ -1,5 +1,6 @@
 package com.luna.skin.domain.analysis.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.luna.skin.domain.skin.enums.DietType;
 import com.luna.skin.domain.skin.enums.ExerciseTime;
 import com.luna.skin.domain.skin.enums.SkinStatus;
@@ -18,6 +19,7 @@ import lombok.NoArgsConstructor;
 public class SkinAnalysisRequest {
 
   @Schema(description = "업로드된 사진 URL", example = "/files/analysis/uuid.png")
+  @JsonProperty("imageUrl")
   private String imageUrl;
 
   @Schema(description = "수면 시간 (시간)", example = "7")

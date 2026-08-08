@@ -15,6 +15,7 @@ import com.luna.skin.domain.skin.entity.TodaySkin;
 import com.luna.skin.domain.skin.repository.TodaySkinRepository;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.domain.user.repository.UserRepository;
+import com.luna.skin.global.config.StorageProperties;
 import com.luna.skin.global.exception.CommonErrorCode;
 import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.global.storage.ImageStorageService;
@@ -42,6 +43,7 @@ public class AnalysisService {
   private final CyclePhaseRepository cyclePhaseRepository;
   private final UserRepository userRepository;
   private final OpenAiService openAiService;
+  private final StorageProperties storageProperties;
 
   public ImageUploadResponse uploadImage(MultipartFile image) {
     validateImageFile(image);
@@ -54,6 +56,9 @@ public class AnalysisService {
 
   @Transactional
   public SkinAnalysisResponse analyze(Long userId, LocalDate date, SkinAnalysisRequest request) {
+
+    log.info("imageUrl: {}", request.getImageUrl());
+    log.info("request: {}", request);
 
     if (todaySkinRepository.findByUserUserIdAndLogDate(userId, date).isPresent()) {
       throw new CustomException(AnalysisErrorCode.ALREADY_ANALYZED);
@@ -83,7 +88,8 @@ public class AnalysisService {
         .orElse(null);
     String phaseType = cyclePhase != null ? cyclePhase.getPhaseType().name() : "UNKNOWN";
 
-    OpenAiSkinAnalysisResult gptResult = openAiService.analyzeSkin(request.getImageUrl(), phaseType);
+    OpenAiSkinAnalysisResult gptResult = openAiService.analyzeSkin(
+        request.getImageUrl(), phaseType, storageProperties.baseDir());
 
     AiAnalysis aiAnalysis = AiAnalysis.builder()
         .todaySkin(todaySkin)

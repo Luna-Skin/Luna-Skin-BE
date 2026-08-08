@@ -2,6 +2,9 @@ spring:
   application:
     name: luna
 
+  jackson:
+    property-naming-strategy: LOWER_CAMEL_CASE
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}

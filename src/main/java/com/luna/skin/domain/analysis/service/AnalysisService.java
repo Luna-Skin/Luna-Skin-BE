@@ -3,9 +3,7 @@ package com.luna.skin.domain.analysis.service;
 import com.luna.skin.domain.analysis.dto.request.SkinAnalysisRequest;
 import com.luna.skin.domain.analysis.dto.response.ImageUploadResponse;
 import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse;
-import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse.DetailedMetrics;
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
-import com.luna.skin.domain.analysis.entity.DetailedSkinAnalysis;
 import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
 import com.luna.skin.domain.analysis.repository.DetailedSkinAnalysisRepository;
@@ -21,6 +19,7 @@ import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.global.storage.ImageStorageService;
 import com.luna.skin.infra.openai.OpenAiSkinAnalysisResult;
 import com.luna.skin.infra.openai.service.OpenAiService;
+import com.luna.skin.domain.analysis.enums.SkinStatusLabel;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -30,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -90,7 +90,7 @@ public class AnalysisService {
     return self.saveAnalysisResult(reservation.todaySkinId(), reservation.phaseType(), date, gptResult);
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public ReservationResult reserveTodaySkin(Long userId, LocalDate date, SkinAnalysisRequest request) {
     if (todaySkinRepository.findByUserUserIdAndLogDate(userId, date).isPresent()) {
       throw new CustomException(AnalysisErrorCode.ALREADY_ANALYZED);
@@ -127,42 +127,33 @@ public class AnalysisService {
     return new ReservationResult(todaySkin.getTodaySkinId(), phaseType);
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void cancelReservation(Long todaySkinId) {
     todaySkinRepository.deleteById(todaySkinId);
   }
 
-  @Transactional
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public SkinAnalysisResponse saveAnalysisResult(
       Long todaySkinId, String phaseType, LocalDate date, OpenAiSkinAnalysisResult gptResult) {
 
     TodaySkin todaySkin = todaySkinRepository.getReferenceById(todaySkinId);
 
+    SkinStatusLabel skinStatusLabel = SkinStatusLabel.from(gptResult.getOverallScore());
+
     AiAnalysis aiAnalysis = AiAnalysis.builder()
         .todaySkin(todaySkin)
         .overallScore(gptResult.getOverallScore())
+        .skinStatusLabel(skinStatusLabel)
         .aiComment(gptResult.getAiComment())
         .phaseComment(gptResult.getPhaseComment())
         .build();
     aiAnalysisRepository.save(aiAnalysis);
 
-    DetailedSkinAnalysis detail = DetailedSkinAnalysis.builder()
-        .aiAnalysis(aiAnalysis)
-        .trouble(gptResult.getTrouble())
-        .sebum(gptResult.getSebum())
-        .dullness(gptResult.getDullness())
-        .moisture(gptResult.getMoisture())
-        .elasticity(gptResult.getElasticity())
-        .build();
-    detailedSkinAnalysisRepository.save(detail);
-
-    String skinStatus = calculateSkinStatus(gptResult.getOverallScore());
-
     return SkinAnalysisResponse.builder()
         .analysisId(aiAnalysis.getAnalysisId())
         .date(date.toString())
         .overallScore(gptResult.getOverallScore())
-        .skinStatus(skinStatus)
+        .skinStatus(skinStatusLabel.toLabel())
         .cyclePhase(phaseType)
         .phaseComment(gptResult.getPhaseComment())
         .aiComment(gptResult.getAiComment())
@@ -178,11 +169,6 @@ public class AnalysisService {
 
   private record ReservationResult(Long todaySkinId, String phaseType) {}
 
-  private String calculateSkinStatus(Integer score) {
-    if (score >= 80) return "좋음";
-    if (score >= 60) return "보통";
-    return "나쁨";
-  }
 
   private void validateImageFile(MultipartFile image) {
     if(image == null || image.isEmpty()) {

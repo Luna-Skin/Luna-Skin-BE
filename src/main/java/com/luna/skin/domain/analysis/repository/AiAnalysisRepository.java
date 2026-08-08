@@ -11,15 +11,14 @@ import java.util.Optional;
 
 public interface AiAnalysisRepository extends JpaRepository<AiAnalysis, Long> {
 
-    // 해당 달에 이루어진 분석 조회
     @Query("select an from AiAnalysis an " +
-            "join fetch an.todaySkin ts " +
-            "where ts.user.userId = :currentUserId " +
-            "and ts.logDate between :startDate and :endDate " +
-            "order by ts.logDate")
+        "join fetch an.todaySkin ts " +
+        "where ts.user.userId = :currentUserId " +
+        "and ts.logDate between :startDate and :endDate " +
+        "order by ts.logDate")
     List<AiAnalysis> findAiAnalysisAtMonth(
-            @Param("currentUserId") Long currentUserId,
-            @Param("startDate") LocalDate startDate,
-            @Param("endDate") LocalDate endDate
+        @Param("currentUserId") Long currentUserId,
+        @Param("startDate") LocalDate startDate,
+        @Param("endDate") LocalDate endDate
     );
 }

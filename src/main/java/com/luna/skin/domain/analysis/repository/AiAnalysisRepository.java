@@ -21,4 +21,6 @@ public interface AiAnalysisRepository extends JpaRepository<AiAnalysis, Long> {
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate
     );
+
+    Optional<AiAnalysis> findByTodaySkinUserUserIdAndTodaySkinLogDate(Long userId, LocalDate logDate);
 }

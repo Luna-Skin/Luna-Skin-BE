@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -84,7 +85,7 @@ public class AnalysisService {
       throw e;
     }
 
-    return self.saveAnalysisResult(reservation.todaySkinId(), reservation.phaseType(), date, gptResult);
+    return self.saveAnalysisResult(reservation.todaySkinId(), reservation.phaseType(), date, gptResult, userId);
   }
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -129,9 +130,10 @@ public class AnalysisService {
     todaySkinRepository.deleteById(todaySkinId);
   }
 
+  @CacheEvict(value = "lifestyleInsight", key = "#userId")
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public SkinAnalysisResponse saveAnalysisResult(
-      Long todaySkinId, String phaseType, LocalDate date, OpenAiSkinAnalysisResult gptResult) {
+      Long todaySkinId, String phaseType, LocalDate date, OpenAiSkinAnalysisResult gptResult, Long userId) {
 
     TodaySkin todaySkin = todaySkinRepository.getReferenceById(todaySkinId);
     SkinStatusLabel skinStatusLabel = SkinStatusLabel.from(gptResult.getOverallScore());

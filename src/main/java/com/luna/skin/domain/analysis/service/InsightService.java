@@ -15,6 +15,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +27,7 @@ public class InsightService {
   private final AiAnalysisRepository aiAnalysisRepository;
   private final DetailedSkinAnalysisRepository detailedSkinAnalysisRepository;
 
+  @Cacheable(value = "lifestyleInsight", key = "#userId")
   public LifestyleInsightResponse getLifestyleInsight(Long userId) {
     List<AiAnalysis> analyses = aiAnalysisRepository.findAllByUserIdWithTodaySkin(userId);
 

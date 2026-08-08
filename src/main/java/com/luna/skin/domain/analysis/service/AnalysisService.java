@@ -28,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -111,7 +112,13 @@ public class AnalysisService {
         .exerciseTime(request.getExerciseTime())
         .skinStatus(request.getSkinStatus())
         .build();
-    todaySkinRepository.save(todaySkin);
+    try {
+      todaySkinRepository.save(todaySkin);
+    } catch (DataIntegrityViolationException e) {
+      // 사전 조회(findByUserUserIdAndLogDate)를 동시 요청이 함께 통과한 경우,
+      // uq_today_skin_user_date 유니크 제약조건 위반이 발생한다. 500 대신 409로 매핑한다.
+      throw new CustomException(AnalysisErrorCode.ALREADY_ANALYZED);
+    }
 
     CyclePhase cyclePhase = cyclePhaseRepository.findByCyclePhaseAtNow(userId, date)
         .orElse(null);

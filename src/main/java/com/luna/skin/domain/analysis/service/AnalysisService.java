@@ -1,6 +1,7 @@
 package com.luna.skin.domain.analysis.service;
 
 import com.luna.skin.domain.analysis.dto.request.SkinAnalysisRequest;
+import com.luna.skin.domain.analysis.dto.response.HomeSkinStatusResponse;
 import com.luna.skin.domain.analysis.dto.response.ImageUploadResponse;
 import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse;
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
@@ -37,7 +38,6 @@ import org.springframework.web.multipart.MultipartFile;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class AnalysisService {
 
   private final ImageStorageService imageStorageService;
@@ -174,6 +174,19 @@ public class AnalysisService {
   }
 
   private record ReservationResult(Long todaySkinId, String phaseType) {}
+
+  public HomeSkinStatusResponse getTodaySkinStatus(Long userId) {
+    return aiAnalysisRepository.findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, LocalDate.now())
+        .map(ai -> HomeSkinStatusResponse.builder()
+            .skinStatus(ai.getSkinStatusLabel() != null
+                ? ai.getSkinStatusLabel().toLabel()
+                : "모름")
+            .aiComment(ai.getAiComment())
+            .build())
+        .orElse(HomeSkinStatusResponse.builder()
+            .skinStatus("모름")
+            .build());
+  }
 
   private void validateImageFile(MultipartFile image) {
     if (image == null || image.isEmpty()) {

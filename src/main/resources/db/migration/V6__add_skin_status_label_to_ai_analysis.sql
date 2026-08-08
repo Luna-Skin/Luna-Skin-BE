@@ -1,0 +1,1 @@
+ALTER TABLE ai_analysis ADD COLUMN skin_status_label VARCHAR(20);

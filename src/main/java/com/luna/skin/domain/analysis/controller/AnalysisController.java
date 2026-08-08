@@ -35,7 +35,8 @@ public class AnalysisController {
   @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<BaseResponse<ImageUploadResponse>> uploadImage(
       @RequestPart("image") MultipartFile image){
-    return ResponseEntity.ok(BaseResponse.success(analysisService.uploadImage(image)));
+    Long userId = currentUserProvider.getCurrentUserId();
+    return ResponseEntity.ok(BaseResponse.success(analysisService.uploadImage(userId, image)));
   }
 
   @Operation(summary = "일별 피부 분석", description = "생활습관 데이터와 사진으로 AI 피부 분석")

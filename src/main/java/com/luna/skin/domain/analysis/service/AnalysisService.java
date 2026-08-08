@@ -36,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class AnalysisService {
 
   private final ImageStorageService imageStorageService;
@@ -52,8 +53,10 @@ public class AnalysisService {
   @Lazy
   private AnalysisService self;
 
-  public ImageUploadResponse uploadImage(MultipartFile image) {
+  public ImageUploadResponse uploadImage(Long userId, MultipartFile image) {
     validateImageFile(image);
+
+    log.info("userId: {} 사진 업로드", userId);
 
     String imageUrl = imageStorageService.store(image, "analysis");
     return ImageUploadResponse.builder()

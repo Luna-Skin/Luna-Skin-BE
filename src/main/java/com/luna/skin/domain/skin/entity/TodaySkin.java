@@ -1,11 +1,12 @@
 package com.luna.skin.domain.skin.entity;
 
-import com.luna.skin.domain.skin.enums.DietType;
 import com.luna.skin.domain.skin.enums.ExerciseTime;
 import com.luna.skin.domain.skin.enums.SkinStatus;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -15,6 +16,8 @@ import java.time.LocalDate;
 @Table(name = "today_skin")
 @Getter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class TodaySkin extends BaseTimeEntity {
 
     @Id

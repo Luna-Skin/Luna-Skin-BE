@@ -4,6 +4,8 @@ import com.luna.skin.domain.analysis.dto.request.SkinAnalysisRequest;
 import com.luna.skin.domain.analysis.dto.response.ImageUploadResponse;
 import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse;
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
+import com.luna.skin.domain.analysis.entity.DetailedSkinAnalysis;
+import com.luna.skin.domain.analysis.enums.SkinStatusLabel;
 import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
 import com.luna.skin.domain.analysis.repository.DetailedSkinAnalysisRepository;
@@ -19,7 +21,6 @@ import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.global.storage.ImageStorageService;
 import com.luna.skin.infra.openai.OpenAiSkinAnalysisResult;
 import com.luna.skin.infra.openai.service.OpenAiService;
-import com.luna.skin.domain.analysis.enums.SkinStatusLabel;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -48,16 +49,13 @@ public class AnalysisService {
   private final OpenAiService openAiService;
   private final StorageProperties storageProperties;
 
-  // OpenAI 호출(analyze) 중에도 프록시를 거쳐 별도 트랜잭션으로 커밋되도록 자기 자신을 지연 주입
   @Autowired
   @Lazy
   private AnalysisService self;
 
   public ImageUploadResponse uploadImage(Long userId, MultipartFile image) {
     validateImageFile(image);
-
     log.info("userId: {} 사진 업로드", userId);
-
     String imageUrl = imageStorageService.store(image, "analysis");
     return ImageUploadResponse.builder()
         .imageUrl(imageUrl)
@@ -72,7 +70,6 @@ public class AnalysisService {
    * OpenAI 호출이 실패하면 예약을 취소해, 같은 날짜로 재시도할 수 있게 한다.
    */
   public SkinAnalysisResponse analyze(Long userId, LocalDate date, SkinAnalysisRequest request) {
-
     log.info("imageUrl: {}", request.getImageUrl());
     log.info("request: {}", request);
 
@@ -137,7 +134,6 @@ public class AnalysisService {
       Long todaySkinId, String phaseType, LocalDate date, OpenAiSkinAnalysisResult gptResult) {
 
     TodaySkin todaySkin = todaySkinRepository.getReferenceById(todaySkinId);
-
     SkinStatusLabel skinStatusLabel = SkinStatusLabel.from(gptResult.getOverallScore());
 
     AiAnalysis aiAnalysis = AiAnalysis.builder()
@@ -148,6 +144,16 @@ public class AnalysisService {
         .phaseComment(gptResult.getPhaseComment())
         .build();
     aiAnalysisRepository.save(aiAnalysis);
+
+    DetailedSkinAnalysis detail = DetailedSkinAnalysis.builder()
+        .aiAnalysis(aiAnalysis)
+        .trouble(gptResult.getTrouble())
+        .sebum(gptResult.getSebum())
+        .dullness(gptResult.getDullness())
+        .moisture(gptResult.getMoisture())
+        .elasticity(gptResult.getElasticity())
+        .build();
+    detailedSkinAnalysisRepository.save(detail);
 
     return SkinAnalysisResponse.builder()
         .analysisId(aiAnalysis.getAnalysisId())
@@ -169,17 +175,14 @@ public class AnalysisService {
 
   private record ReservationResult(Long todaySkinId, String phaseType) {}
 
-
   private void validateImageFile(MultipartFile image) {
-    if(image == null || image.isEmpty()) {
+    if (image == null || image.isEmpty()) {
       throw new CustomException(AnalysisErrorCode.EMPTY_FILE);
     }
-
     String originalFilename = image.getOriginalFilename();
-    if(originalFilename == null || originalFilename.isEmpty()) {
+    if (originalFilename == null || originalFilename.isEmpty()) {
       throw new CustomException(AnalysisErrorCode.INVALID_FILE_TYPE);
     }
-
     String ext = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
     if (!List.of("jpg", "jpeg", "png").contains(ext)) {
       throw new CustomException(AnalysisErrorCode.INVALID_FILE_TYPE);

@@ -3,6 +3,7 @@ package com.luna.skin.domain.analysis.controller;
 import com.luna.skin.domain.analysis.dto.request.SkinAnalysisRequest;
 import com.luna.skin.domain.analysis.dto.response.HomeSkinStatusResponse;
 import com.luna.skin.domain.analysis.dto.response.ImageUploadResponse;
+import com.luna.skin.domain.analysis.dto.response.LifestyleInsightResponse;
 import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse;
 import com.luna.skin.domain.analysis.service.AnalysisService;
 import com.luna.skin.global.response.BaseResponse;
@@ -69,5 +70,4 @@ public class AnalysisController {
     return ResponseEntity.ok(BaseResponse.success(
         analysisService.getTodaySkinStatus(currentUserProvider.getCurrentUserId())));
   }
-
 }

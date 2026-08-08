@@ -11,6 +11,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -63,7 +65,7 @@ public class InsightService {
         DetailedSkinAnalysis::getDullness,
         "운동 부족", "칙칙함 ↑", "칙칙함 ↓");
 
-    // 자극적 식단
+    // 자극적 식단 조건 수정 - null이면 양쪽 다 제외
     List<String> badFoods = List.of("SPICY_FOOD", "CAFFEINE", "HIGH_FAT", "SUGAR", "SODA", "ALCOHOL");
     addFactorIfSignificant(factors, analyses, detailMap,
         a -> {
@@ -73,7 +75,7 @@ public class InsightService {
         },
         a -> {
           String diet = a.getTodaySkin().getDietType();
-          if (diet == null) return true;
+          if (diet == null) return false;  // null이면 양호군에도 미포함
           return Arrays.stream(diet.split(",")).noneMatch(badFoods::contains);
         },
         DetailedSkinAnalysis::getTrouble,
@@ -93,12 +95,13 @@ public class InsightService {
       String negativeLabel,
       String positiveLabel) {
 
-    double badAvg = avgMetric(analyses.stream().filter(badCondition).collect(Collectors.toList()), detailMap, metric);
-    double goodAvg = avgMetric(analyses.stream().filter(goodCondition).collect(Collectors.toList()), detailMap, metric);
+    Optional<Double> badAvg = avgMetric(analyses.stream().filter(badCondition).collect(Collectors.toList()), detailMap, metric);
+    Optional<Double> goodAvg = avgMetric(analyses.stream().filter(goodCondition).collect(Collectors.toList()), detailMap, metric);
 
-    if (badAvg == 0 && goodAvg == 0) return;
+    if (badAvg.isEmpty() || goodAvg.isEmpty()) return;
+    if (badAvg.get().equals(goodAvg.get())) return;
 
-    if (badAvg > goodAvg) {
+    if (badAvg.get() > goodAvg.get()) {
       factors.add(LifestyleInsightResponse.LifestyleFactor.builder()
           .condition(condition)
           .impactType("negative")
@@ -113,15 +116,16 @@ public class InsightService {
     }
   }
 
-  private double avgMetric(List<AiAnalysis> list, Map<Long, DetailedSkinAnalysis> detailMap,
+  private Optional<Double> avgMetric(List<AiAnalysis> list, Map<Long, DetailedSkinAnalysis> detailMap,
       Function<DetailedSkinAnalysis, Integer> getter) {
-    return list.stream()
+    OptionalDouble result = list.stream()
         .map(a -> detailMap.get(a.getAnalysisId()))
         .filter(Objects::nonNull)
         .map(getter)
         .filter(Objects::nonNull)
         .mapToInt(Integer::intValue)
-        .average()
-        .orElse(0);
+        .average();
+    return result.isPresent() ? Optional.of(result.getAsDouble()) : Optional.empty();
   }
+
 }

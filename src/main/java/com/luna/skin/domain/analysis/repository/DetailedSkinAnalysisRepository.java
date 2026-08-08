@@ -8,7 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 public interface DetailedSkinAnalysisRepository extends JpaRepository<DetailedSkinAnalysis, Long> {
-  Optional<DetailedSkinAnalysis> findByAiAnalysis(AiAnalysis aiAnalysis);
 
-  List<DetailedSkinAnalysis> findAllByAiAnalysisIn(List<AiAnalysis> analyses);
+    // 분석에 맞는 상세 지표를 조회
+    Optional<DetailedSkinAnalysis> findByAiAnalysis(AiAnalysis aiAnalysis);
+
+    List<DetailedSkinAnalysis> findAllByAiAnalysisIn(List<AiAnalysis> analyses);
 }

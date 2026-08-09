@@ -1,5 +1,6 @@
 package com.luna.skin.domain.analysis.controller;
 
+import com.luna.skin.domain.analysis.dto.response.CycleDetailResponse;
 import com.luna.skin.domain.analysis.dto.response.LifestyleInsightResponse;
 import com.luna.skin.domain.analysis.dto.response.TroubleTimelineResponse;
 import com.luna.skin.domain.analysis.service.InsightService;
@@ -22,17 +23,26 @@ public class InsightController {
   private final InsightService insightService;
   private final CurrentUserProvider currentUserProvider;
 
-  @Operation(summary = "생활습관 영향 분석(인사이트)", description = "생활습관 기반으로 피부 영향 분석하는 API")
-  @GetMapping("/lifestyle")
-  public ResponseEntity<BaseResponse<LifestyleInsightResponse>> getLifestyleInsight() {
-    return ResponseEntity.ok(BaseResponse.success(
-        insightService.getLifestyleInsight(currentUserProvider.getCurrentUserId())));
-  }
-
-  @Operation(summary = "트러블 지수 타임라인")
+  @Operation(summary = "트러블 지수 타임라인", description = "누적 트러블 점수를 생리 D-14 ~ D+14 기간동안 분석하는 API")
   @GetMapping("/trouble-timeline")
   public ResponseEntity<BaseResponse<TroubleTimelineResponse>> getTroubleTimeline() {
+    Long userId = currentUserProvider.getCurrentUserId();
     return ResponseEntity.ok(BaseResponse.success(
-        insightService.getTroubleTimeline(currentUserProvider.getCurrentUserId())));
+        insightService.getTroubleTimeline(userId)));
+  }
+
+  @Operation(summary = "주기 단계 별 피부 세부 지표", description = "누적 피부 점수를 주기 단계별로 비교하는 API")
+  @GetMapping("/cycle-detail")
+  public ResponseEntity<BaseResponse<CycleDetailResponse>> getCycleDetail() {
+    Long userId = currentUserProvider.getCurrentUserId();
+    return  ResponseEntity.ok(BaseResponse.success(insightService.getCycleDetail(userId)));
+  }
+
+  @Operation(summary = "생활습관 영향 분석", description = "생활습관 기반으로 피부 영향 분석하는 API")
+  @GetMapping("/lifestyle")
+  public ResponseEntity<BaseResponse<LifestyleInsightResponse>> getLifestyleInsight() {
+    Long userId = currentUserProvider.getCurrentUserId();
+    return ResponseEntity.ok(BaseResponse.success(
+        insightService.getLifestyleInsight(userId)));
   }
 }

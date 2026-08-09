@@ -130,7 +130,7 @@ public class AnalysisService {
     todaySkinRepository.deleteById(todaySkinId);
   }
 
-  @CacheEvict(value = {"lifestyleInsight", "troubleTimeline"}, key = "#userId")
+  @CacheEvict(value = {"troubleTimeline", "cycleDetail", "lifestyleInsight"}, key = "#userId")
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public SkinAnalysisResponse saveAnalysisResult(
       Long todaySkinId, String phaseType, LocalDate date, OpenAiSkinAnalysisResult gptResult, Long userId) {

@@ -17,6 +17,7 @@ import com.luna.skin.domain.user.repository.UserRepository;
 import com.luna.skin.global.exception.CustomException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -182,6 +183,7 @@ public class CycleService {
     }
 
     // 생리 시작일 기록
+    @CacheEvict(value = "cycleDetail", key = "#currentUserId")
     @Transactional
     public void startMenstruation(Long currentUserId, LocalDate startDate) {
 
@@ -259,6 +261,7 @@ public class CycleService {
         cyclePhaseRepository.saveAll(CyclePhase.of(newCycle));
     }
 
+    @CacheEvict(value = "cycleDetail", key = "#currentUserId")
     @Transactional
     public void endMenstruation(Long currentUserId, LocalDate endDate) {
 

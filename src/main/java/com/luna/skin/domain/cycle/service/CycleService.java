@@ -93,12 +93,8 @@ public class CycleService {
         List<AiAnalysis> aiAnalysisAtMonth = aiAnalysisRepository
                 .findAiAnalysisAtMonth(currentUserId, startDate, endDate);
 
-        List<Integer> analysisDates = aiAnalysisAtMonth.stream()
-                .map(an -> an.getTodaySkin().getLogDate().getDayOfMonth())
-                .toList();
-
         log.info("[월별 주기 단계 및 분석 여부 조회] 조회 완료 - 실제 {}개, 예측 {}개", actualResponses.size(), predictedResponses.size());
-        return CycleAndAnalysisDateResponse.of(combined, analysisDates);
+        return CycleAndAnalysisDateResponse.of(combined, aiAnalysisAtMonth);
     }
 
     // 주기 단계 예측일 계산 매서드

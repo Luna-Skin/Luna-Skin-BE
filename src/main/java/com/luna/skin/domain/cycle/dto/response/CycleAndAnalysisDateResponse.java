@@ -1,5 +1,6 @@
 package com.luna.skin.domain.cycle.dto.response;
 
+import com.luna.skin.domain.analysis.dto.response.AnalysisResponse;
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.cycle.entity.CyclePhase;
 import lombok.*;
@@ -13,19 +14,19 @@ import java.util.List;
 public class CycleAndAnalysisDateResponse {
 
     private List<CycleResponse> cycleResponses;
-    private List<Integer> analysisDates;;
+    private List<AnalysisResponse> analyses;;
 
     // 실제데이터 반환용
     public static CycleAndAnalysisDateResponse from(List<CyclePhase> cyclePhaseAtMonth, List<AiAnalysis> aiAnalysisAtMonth) {
         List<CycleResponse> cycleResponses = cyclePhaseAtMonth.stream().map(CycleResponse::from).toList();
 
-        List<Integer> analysisDates = aiAnalysisAtMonth.stream()
-                .map(an -> an.getTodaySkin().getLogDate().getDayOfMonth())
+        List<AnalysisResponse> analysisDates = aiAnalysisAtMonth.stream()
+                .map(AnalysisResponse::of)
                 .toList();
 
         return CycleAndAnalysisDateResponse.builder()
                 .cycleResponses(cycleResponses)
-                .analysisDates(analysisDates)
+                .analyses(analysisDates)
                 .build();
     }
 
@@ -33,15 +34,21 @@ public class CycleAndAnalysisDateResponse {
     public static CycleAndAnalysisDateResponse fromPredicted(List<CycleResponse> predicted) {
         return CycleAndAnalysisDateResponse.builder()
                 .cycleResponses(predicted)
-                .analysisDates(List.of())
+                .analyses(List.of())
                 .build();
     }
 
     // 실제 + 예측 혼합 반환용
-    public static CycleAndAnalysisDateResponse of(List<CycleResponse> cycleResponses, List<Integer> analysisDates) {
+    public static CycleAndAnalysisDateResponse of(List<CycleResponse> cycleResponses, List<AiAnalysis> aiAnalysisAtMonth) {
+
+
+        List<AnalysisResponse> analysisDates = aiAnalysisAtMonth.stream()
+                .map(AnalysisResponse::of)
+                .toList();
+
         return CycleAndAnalysisDateResponse.builder()
                 .cycleResponses(cycleResponses)
-                .analysisDates(analysisDates)
+                .analyses(analysisDates)
                 .build();
     }
 

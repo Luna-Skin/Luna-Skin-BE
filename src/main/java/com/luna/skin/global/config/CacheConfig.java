@@ -14,7 +14,7 @@ public class CacheConfig {
   @Bean
   public CacheManager cacheManager() {
     return new TransactionAwareCacheManagerProxy(
-        new ConcurrentMapCacheManager("lifestyleInsight", "troubleTimeline")
+        new ConcurrentMapCacheManager( "troubleTimeline", "cycleDetail", "lifestyleInsight")
     );
   }
 }

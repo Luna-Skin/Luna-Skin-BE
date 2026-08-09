@@ -48,4 +48,11 @@ public interface CyclePhaseRepository extends JpaRepository<CyclePhase, Long> {
             @Param("startDate")LocalDate startDate,
             @Param("phaseType") PhaseType phaseType);
 
+    @Query("select cp from CyclePhase cp join cp.menstruationCycle mc " +
+        "where mc.user.userId = :userId " +
+        "and cp.phaseType in :phaseTypes")
+    List<CyclePhase> findAllByUserIdAndPhaseTypes(
+        @Param("userId") Long userId,
+        @Param("phaseTypes") List<PhaseType> phaseTypes);
+
 }

@@ -5,6 +5,7 @@ import com.luna.skin.domain.chat.service.ChatService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -25,7 +26,7 @@ public class ChatMessageController {
     )
     @MessageMapping("/chat/send")
     public void sendMessage(
-            @Parameter(description = "전송할 메시지") @Payload SendChatMessageRequest request,
+            @Parameter(description = "전송할 메시지") @Valid @Payload SendChatMessageRequest request,
             @Parameter(description = "WebSocket 세션 속성에 접근하기 위한 헤더 접근자") SimpMessageHeaderAccessor headerAccessor
     ) {
         Long userId = (Long) headerAccessor.getSessionAttributes().get("userId");

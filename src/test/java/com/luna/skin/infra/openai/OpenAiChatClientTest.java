@@ -18,7 +18,6 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
-import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -71,23 +70,19 @@ class OpenAiChatClientTest {
     }
 
     @Test
-    void 대화_기록이_20개를_넘으면_최근_20개만_전송한다() {
-        List<AiChatMessage> history = IntStream.range(0, 25)
-                .mapToObj(i -> message(MessageRole.USER, "메시지" + i))
-                .toList();
+    void 분석_컨텍스트가_있으면_시스템_프롬프트에_덧붙여_전달한다() {
         OpenAiChatResponse response = new OpenAiChatResponse(
-                List.of(new OpenAiChatResponse.Choice(new OpenAiMessage("assistant", "ok")))
+                List.of(new OpenAiChatResponse.Choice(new OpenAiMessage("assistant", "답변")))
         );
         ArgumentCaptor<Object> requestCaptor = ArgumentCaptor.forClass(Object.class);
         when(openAiRestTemplate.postForObject(anyString(), requestCaptor.capture(), eq(OpenAiChatResponse.class)))
                 .thenReturn(response);
 
-        openAiChatClient.getReply(history);
+        openAiChatClient.getReply(List.of(), "오늘 유분 90, 트러블 45.");
 
         OpenAiChatRequest sentRequest = (OpenAiChatRequest) requestCaptor.getValue();
-        assertThat(sentRequest.messages()).hasSize(21);
-        assertThat(sentRequest.messages().get(1).content()).isEqualTo("메시지5");
-        assertThat(sentRequest.messages().get(20).content()).isEqualTo("메시지24");
+        assertThat(sentRequest.messages().get(0).role()).isEqualTo("system");
+        assertThat(sentRequest.messages().get(0).content()).contains("오늘 유분 90, 트러블 45.");
     }
 
     @Test

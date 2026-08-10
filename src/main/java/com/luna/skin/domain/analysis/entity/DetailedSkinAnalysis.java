@@ -2,6 +2,8 @@ package com.luna.skin.domain.analysis.entity;
 
 import com.luna.skin.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -9,6 +11,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "detailed_skin_analysis")
 @Getter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class DetailedSkinAnalysis extends BaseTimeEntity {
 
     @Id

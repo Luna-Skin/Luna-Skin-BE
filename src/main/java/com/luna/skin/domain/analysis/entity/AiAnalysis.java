@@ -1,8 +1,11 @@
 package com.luna.skin.domain.analysis.entity;
 
+import com.luna.skin.domain.analysis.enums.SkinStatusLabel;
 import com.luna.skin.domain.skin.entity.TodaySkin;
 import com.luna.skin.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -10,6 +13,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "ai_analysis")
 @Getter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class AiAnalysis extends BaseTimeEntity {
 
     @Id
@@ -23,6 +28,10 @@ public class AiAnalysis extends BaseTimeEntity {
 
     @Column(name = "overall_score")
     private Integer overallScore;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "skin_status_label", length = 20)
+    private SkinStatusLabel skinStatusLabel;
 
     @Column(name = "phase_comment")
     private String phaseComment;

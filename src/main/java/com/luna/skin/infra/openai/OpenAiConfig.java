@@ -1,5 +1,6 @@
-package com.luna.skin.global.config;
+package com.luna.skin.infra.openai;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,10 +16,15 @@ public class OpenAiConfig {
   public RestTemplate openAiRestTemplate() {
     RestTemplate restTemplate = new RestTemplate();
     restTemplate.getInterceptors().add((request, body, execution) -> {
-      request.getHeaders().add("Authorization", "Bearer " + apiKey);
-      request.getHeaders().add("Content-Type", "application/json");
+      request.getHeaders().set("Authorization", "Bearer " + apiKey);
+      request.getHeaders().set("Content-Type", "application/json");
       return execution.execute(request, body);
     });
     return restTemplate;
+  }
+
+  @Bean
+  public ObjectMapper objectMapper() {
+    return new ObjectMapper();
   }
 }

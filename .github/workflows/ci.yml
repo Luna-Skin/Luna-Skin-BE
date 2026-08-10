@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: lunaskin
+          POSTGRES_USER: lunaskin
+          POSTGRES_PASSWORD: lunaskin123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lunaskin"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build and test
+        run: ./gradlew build
+        env:
+          DB_URL: jdbc:postgresql://localhost:5432/lunaskin
+          DB_USERNAME: lunaskin
+          DB_PASSWORD: lunaskin123
+          OPENAI_API_KEY: test-key

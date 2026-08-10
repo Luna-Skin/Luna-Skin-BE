@@ -1,0 +1,89 @@
+package com.luna.skin.infra.openai;
+
+import com.luna.skin.domain.chat.entity.AiChatMessage;
+import com.luna.skin.domain.chat.enums.MessageRole;
+import com.luna.skin.domain.chat.exception.ChatErrorCode;
+import com.luna.skin.global.exception.CustomException;
+import com.luna.skin.infra.openai.dto.OpenAiChatRequest;
+import com.luna.skin.infra.openai.dto.OpenAiChatResponse;
+import com.luna.skin.infra.openai.dto.OpenAiMessage;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.List;
+import java.util.stream.Stream;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class OpenAiChatClient {
+
+    private static final String SYSTEM_PROMPT = """
+            당신은 LunaSkin 앱의 AI 피부 상담사 "끼끼"입니다.
+            LunaSkin은 피부 상태가 생리 주기(생리기·배란기·황체기)에 따라 달라진다는 전제로,
+            사용자의 피부 분석 기록과 생활 습관을 바탕으로 맞춤 스킨케어를 상담해주는 서비스입니다.
+
+            답변 원칙:
+            - 문체는 "~예요", "~해요" 체의 친근하지만 전문적인 존댓말로 답변하세요.
+            - 사용자 메시지와 함께 피부 분석 기록(종합점수, 트러블·유분·칙칙함·수분·탄력 지표, 생리 주기 단계, AI 코멘트)이
+              전달되면 반드시 그 기록을 근거로 답변하세요. 지금 상태가 어떤 호르몬 변화·주기 단계와 연결되는지 짚어준 뒤,
+              실천 가능한 스킨케어 루틴(성분, 사용 빈도 등)을 구체적으로 제안하세요.
+            - 분석 기록이 없는 일반적인 질문에는 통상적인 스킨케어 지식으로 답변하세요.
+            - 답변은 2~4문장 내외로 간결하게 작성하세요.
+            - 의학적 진단이나 처방을 내리지 마세요. 트러블이 심하거나 증상이 오래 지속되면 피부과 방문을 권유하세요.
+            """;
+    public static final int MAX_HISTORY_SIZE = 20;
+
+    private final RestTemplate openAiRestTemplate;
+
+    @Value("${luna-skin.ai.openai.endpoint}")
+    private String endpoint;
+
+    @Value("${luna-skin.ai.openai.model}")
+    private String model;
+
+    /**
+     * @param history 시간순(오래된순)으로 정렬되고 최근 {@value #MAX_HISTORY_SIZE}개 이하로
+     *                이미 제한된 대화 이력이어야 한다.
+     */
+    public String getReply(List<AiChatMessage> history) {
+        return getReply(history, null);
+    }
+
+    /**
+     * @param history 시간순(오래된순)으로 정렬되고 최근 {@value #MAX_HISTORY_SIZE}개 이하로
+     *                이미 제한된 대화 이력이어야 한다.
+     * @param analysisContext 채팅방이 특정 분석 기록과 연결된 경우 시스템 프롬프트에 덧붙일 컨텍스트. 없으면 null.
+     */
+    public String getReply(List<AiChatMessage> history, String analysisContext) {
+        String systemPrompt = (analysisContext == null || analysisContext.isBlank())
+                ? SYSTEM_PROMPT
+                : SYSTEM_PROMPT + "\n\n" + analysisContext;
+
+        List<OpenAiMessage> messages = Stream.concat(
+                Stream.of(new OpenAiMessage("system", systemPrompt)),
+                history.stream().map(this::toOpenAiMessage)
+        ).toList();
+
+        OpenAiChatRequest request = new OpenAiChatRequest(model, messages);
+
+        try {
+            OpenAiChatResponse response = openAiRestTemplate.postForObject(
+                    endpoint + "/chat/completions", request, OpenAiChatResponse.class);
+
+            return response.choices().get(0).message().content();
+        } catch (RestClientException | NullPointerException | IndexOutOfBoundsException e) {
+            log.error("[OpenAiChatClient] AI 응답 실패", e);
+            throw new CustomException(ChatErrorCode.AI_RESPONSE_FAILED);
+        }
+    }
+
+    private OpenAiMessage toOpenAiMessage(AiChatMessage message) {
+        String role = message.getRole() == MessageRole.AI ? "assistant" : "user";
+        return new OpenAiMessage(role, message.getContent());
+    }
+}

@@ -6,6 +6,7 @@ import com.luna.skin.domain.user.service.UserService;
 import com.luna.skin.global.response.BaseResponse;
 import com.luna.skin.global.security.CurrentUserProvider;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "User", description = "유저 API")
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor

@@ -2,6 +2,7 @@ package com.luna.skin.domain.cycle.service;
 
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
+import com.luna.skin.domain.cycle.dto.request.CycleInfoUpdateRequest;
 import com.luna.skin.domain.cycle.dto.response.CycleAndAnalysisDateResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleCommentResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleInfoResponse;
@@ -305,5 +306,25 @@ public class CycleService {
                 });
 
         return CycleInfoResponse.from(user);
+    }
+
+    @Transactional
+    public void changeCycleInfo(Long currentUserId, CycleInfoUpdateRequest request) {
+
+        log.info("[생리정보수정] currentUserId = {}, duration = {}, cycleLength = {}", currentUserId, request.getPeriodDuration(), request.getCycleLength());
+
+        // 생리 기간은 주기보단 짧아야 함.
+        if(request.getCycleLength() < request.getPeriodDuration()) {
+            throw new CustomException(CycleErrorCode.INVALID_CYCLE_PERIOD_RANGE);
+        }
+
+        User user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> {
+                    log.warn("[생리정보수정] 해당 유저를 찾을 수 없습니다,currentUserId = {}", currentUserId);
+                    return new CustomException(UserErrorCode.USER_NOT_FOUND);
+                });
+
+        // 주기, 기간 업데이트
+        user.updateCycleSettings(request.getPeriodDuration(), request.getCycleLength());
     }
 }

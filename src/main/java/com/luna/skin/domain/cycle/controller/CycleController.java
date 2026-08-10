@@ -2,6 +2,7 @@ package com.luna.skin.domain.cycle.controller;
 
 import com.luna.skin.domain.cycle.dto.response.CycleAndAnalysisDateResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleCommentResponse;
+import com.luna.skin.domain.cycle.dto.response.CycleInfoResponse;
 import com.luna.skin.domain.cycle.service.CycleService;
 import com.luna.skin.global.response.BaseResponse;
 import com.luna.skin.global.security.CurrentUserProvider;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.apache.coyote.Response;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -78,6 +80,17 @@ public class CycleController {
                 .body(BaseResponse.success(cycleComment));
     }
 
+    @Operation(summary = "사용자의 주기 정보를 조회합니다.", description = "사용자가 설정한 주기 길이, 월경 길이를 조회합니다.")
+    @GetMapping("/info")
+    public ResponseEntity<BaseResponse<CycleInfoResponse>> getCycleInfo() {
+
+        CycleInfoResponse cycleInfo = cycleService
+                .getCycleInfo(currentUserProvider.getCurrentUserId());
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(cycleInfo));
+    }
 
 
 }

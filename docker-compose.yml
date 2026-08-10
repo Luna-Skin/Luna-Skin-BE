@@ -4,8 +4,8 @@ services:
     image: postgres:15
     environment:
       POSTGRES_DB: lunaskin
-      POSTGRES_USER: lunaskin
-      POSTGRES_PASSWORD: lunaskin123
+      POSTGRES_USER: ${DB_USERNAME:-lunaskin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-lunaskin123}
     ports:
       - "5432:5432"
     volumes:
@@ -13,12 +13,15 @@ services:
 
   app:
     build: .
+    image: ${DOCKERHUB_USERNAME:-lunaskin}/luna-skin-backend:latest
     ports:
       - "8080:8080"
     depends_on:
       - db
     env_file:
       - .env
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/lunaskin
 
 volumes:
   postgres_data:

@@ -1,9 +1,12 @@
 package com.luna.skin.domain.user.service;
 
+import com.luna.skin.domain.user.dto.request.UserSkinInfoUpdateRequest;
 import com.luna.skin.domain.user.dto.response.UserSkinInfoResponse;
 import com.luna.skin.domain.user.entity.SkinConcern;
 import com.luna.skin.domain.user.entity.SkinType;
 import com.luna.skin.domain.user.entity.User;
+import com.luna.skin.domain.user.entity.UserSkinConcern;
+import com.luna.skin.domain.user.entity.UserSkinType;
 import com.luna.skin.domain.user.exception.UserErrorCode;
 import com.luna.skin.domain.user.repository.SkinConcernRepository;
 import com.luna.skin.domain.user.repository.SkinTypeRepository;
@@ -54,5 +57,40 @@ public class UserService {
                 .stream().map(SkinConcern::getSkinConcernId).collect(Collectors.toSet());
 
         return UserSkinInfoResponse.of(allTypes, selectedTypeIds, allConcerns, selectedConcernIds);
+    }
+
+    @Transactional
+    public void updateSkinInfo(Long currentUserId, UserSkinInfoUpdateRequest request) {
+
+        log.info("[피부 정보 수정] currentUserId = {}", currentUserId);
+
+        User user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> {
+                    log.warn("[피부 정보 수정] 유저를 찾을 수 없습니다. currentUserId = {}", currentUserId);
+                    return new CustomException(UserErrorCode.USER_NOT_FOUND);
+                });
+
+        List<SkinType> skinTypes = skinTypeRepository.findAllById(request.getSkinTypeIds());
+        if (skinTypes.size() != request.getSkinTypeIds().size()) {
+            log.warn("[피부 정보 수정] 우효하지 않는 스킨타입이 있습니다.");
+            throw new CustomException(UserErrorCode.INVALID_SKIN_TYPE);
+        }
+
+        List<SkinConcern> skinConcerns = skinConcernRepository.findAllById(request.getSkinConcernIds());
+        if (skinConcerns.size() != request.getSkinConcernIds().size()) {
+            log.warn("[피부 정보 수정] 우효하지 않는 피부고민이 있습니다.");
+            throw new CustomException(UserErrorCode.INVALID_SKIN_CONCERN);
+        }
+
+        // 피부 타입 삭제
+        userSkinTypeRepository.deleteAllByUserUserId(currentUserId);
+        // 피부 고민 삭제
+        userSkinConcernRepository.deleteAllByUserUserId(currentUserId);
+
+        // 다시 저장
+        userSkinTypeRepository.saveAll(
+                skinTypes.stream().map(st -> UserSkinType.of(user, st)).toList());
+        userSkinConcernRepository.saveAll(
+                skinConcerns.stream().map(sc -> UserSkinConcern.of(user, sc)).toList());
     }
 }

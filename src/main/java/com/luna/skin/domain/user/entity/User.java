@@ -2,13 +2,14 @@ package com.luna.skin.domain.user.entity;
 
 import com.luna.skin.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 @Entity
 @Table(name = "users")
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PROTECTED)
+@Builder(access = AccessLevel.PROTECTED)
 public class User extends BaseTimeEntity {
 
     @Id

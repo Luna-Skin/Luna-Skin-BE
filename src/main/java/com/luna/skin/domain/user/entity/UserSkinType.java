@@ -1,13 +1,14 @@
 package com.luna.skin.domain.user.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 @Entity
 @Table(name = "user_skin_type")
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PROTECTED)
+@Builder(access = AccessLevel.PROTECTED)
 public class UserSkinType {
 
     @Id
@@ -22,4 +23,12 @@ public class UserSkinType {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "skin_type_id", nullable = false)
     private SkinType skinType;
+
+
+    public static UserSkinType of(User user, SkinType skinType) {
+        return UserSkinType.builder()
+                .user(user)
+                .skinType(skinType)
+                .build();
+    }
 }

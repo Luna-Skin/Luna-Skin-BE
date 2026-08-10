@@ -4,6 +4,7 @@ import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
 import com.luna.skin.domain.cycle.dto.response.CycleAndAnalysisDateResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleCommentResponse;
+import com.luna.skin.domain.cycle.dto.response.CycleInfoResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleResponse;
 import com.luna.skin.domain.cycle.entity.CyclePhase;
 import com.luna.skin.domain.cycle.entity.MenstruationCycle;
@@ -291,5 +292,18 @@ public class CycleService {
         // 주기 단계 갱신
         cyclePhaseRepository.deleteAllByMenstruationCycle(targetMenstruation);
         cyclePhaseRepository.saveAll(CyclePhase.of(targetMenstruation));
+    }
+
+    public CycleInfoResponse getCycleInfo(Long currentUserId) {
+
+        log.info("[주기 정보 조회] currentUserId = {}", currentUserId);
+
+        User user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> {
+                    log.warn("[주기 정보 조회] 해당 유저를 찾을 수 없습니다,currentUserId = {}", currentUserId);
+                    return new CustomException(UserErrorCode.USER_NOT_FOUND);
+                });
+
+        return CycleInfoResponse.from(user);
     }
 }

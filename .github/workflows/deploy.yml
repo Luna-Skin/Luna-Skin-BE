@@ -76,6 +76,8 @@ jobs:
             AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}
 
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+
+            CORS_ALLOWED_ORIGINS=${{ secrets.CORS_ALLOWED_ORIGINS }}
             EOF
 
             docker compose pull

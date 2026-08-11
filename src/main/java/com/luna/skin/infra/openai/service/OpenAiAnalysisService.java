@@ -6,6 +6,9 @@ import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
 import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.infra.openai.OpenAiSkinAnalysisResult;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -90,43 +93,32 @@ public class OpenAiAnalysisService {
   }
 
   private EncodedImage convertToBase64(String imageUrl, String baseDir) {
-    if (imageUrl == null || !imageUrl.startsWith("/files/")) {
+    if (imageUrl == null || !imageUrl.startsWith("https://luna-skin-images.s3.ap-northeast-2.amazonaws.com/")) {
       log.error("허용되지 않은 imageUrl 형식: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
 
     try {
-      Path uploadRoot = Path.of(baseDir).toRealPath();
-      Path imagePath = uploadRoot
-          .resolve(imageUrl.substring("/files/".length()))
-          .normalize()
-          .toRealPath();
-
-      if (!imagePath.startsWith(uploadRoot) || !Files.isRegularFile(imagePath)) {
-        log.error("업로드 루트를 벗어난 imageUrl: {}", imageUrl);
-        throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
+      URLConnection conn = new URL(imageUrl).openConnection();
+      conn.setConnectTimeout(5000);
+      conn.setReadTimeout(10000);
+      try (InputStream is = conn.getInputStream()) {
+        byte[] bytes = is.readNBytes(10 * 1024 * 1024); // 10MB 제한
+        String base64Data = Base64.getEncoder().encodeToString(bytes);
+        String mimeType = resolveMimeTypeFromUrl(imageUrl);
+        return new EncodedImage(base64Data, mimeType);
       }
-
-      byte[] bytes = Files.readAllBytes(imagePath);
-      String base64Data = Base64.getEncoder().encodeToString(bytes);
-      return new EncodedImage(base64Data, resolveMimeType(imagePath));
     } catch (IOException e) {
-      log.error("이미지 파일 읽기 실패: {}", imageUrl);
+      log.error("이미지 다운로드 실패: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
   }
-
-  private String resolveMimeType(Path imagePath) throws IOException {
-    String fileName = imagePath.getFileName().toString().toLowerCase();
-    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
-      return "image/jpeg";
-    }
-    if (fileName.endsWith(".png")) {
-      return "image/png";
-    }
-
-    String detected = Files.probeContentType(imagePath);
-    return detected != null ? detected : "image/png";
+  private String resolveMimeTypeFromUrl(String imageUrl) {
+    String lower = imageUrl.toLowerCase();
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+    if (lower.endsWith(".png")) return "image/png";
+    if (lower.endsWith(".webp")) return "image/webp";
+    return "image/png";
   }
 
   private record EncodedImage(String base64Data, String mimeType) {}

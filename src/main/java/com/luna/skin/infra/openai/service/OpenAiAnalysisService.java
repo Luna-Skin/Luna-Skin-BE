@@ -6,6 +6,7 @@ import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
 import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.infra.openai.OpenAiSkinAnalysisResult;
 import java.io.IOException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -90,43 +91,29 @@ public class OpenAiAnalysisService {
   }
 
   private EncodedImage convertToBase64(String imageUrl, String baseDir) {
-    if (imageUrl == null || !imageUrl.startsWith("/files/")) {
-      log.error("허용되지 않은 imageUrl 형식: {}", imageUrl);
+    if (imageUrl == null || imageUrl.isBlank()) {
+      log.error("imageUrl이 null 또는 비어있습니다.");
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
 
     try {
-      Path uploadRoot = Path.of(baseDir).toRealPath();
-      Path imagePath = uploadRoot
-          .resolve(imageUrl.substring("/files/".length()))
-          .normalize()
-          .toRealPath();
-
-      if (!imagePath.startsWith(uploadRoot) || !Files.isRegularFile(imagePath)) {
-        log.error("업로드 루트를 벗어난 imageUrl: {}", imageUrl);
-        throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
-      }
-
-      byte[] bytes = Files.readAllBytes(imagePath);
+      URL url = new URL(imageUrl);
+      byte[] bytes = url.openStream().readAllBytes();
       String base64Data = Base64.getEncoder().encodeToString(bytes);
-      return new EncodedImage(base64Data, resolveMimeType(imagePath));
+      String mimeType = resolveMimeTypeFromUrl(imageUrl);
+      return new EncodedImage(base64Data, mimeType);
     } catch (IOException e) {
-      log.error("이미지 파일 읽기 실패: {}", imageUrl);
+      log.error("이미지 다운로드 실패: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
   }
 
-  private String resolveMimeType(Path imagePath) throws IOException {
-    String fileName = imagePath.getFileName().toString().toLowerCase();
-    if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
-      return "image/jpeg";
-    }
-    if (fileName.endsWith(".png")) {
-      return "image/png";
-    }
-
-    String detected = Files.probeContentType(imagePath);
-    return detected != null ? detected : "image/png";
+  private String resolveMimeTypeFromUrl(String imageUrl) {
+    String lower = imageUrl.toLowerCase();
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+    if (lower.endsWith(".png")) return "image/png";
+    if (lower.endsWith(".webp")) return "image/webp";
+    return "image/png";
   }
 
   private record EncodedImage(String base64Data, String mimeType) {}

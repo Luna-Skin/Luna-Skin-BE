@@ -6,7 +6,9 @@ import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
 import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.infra.openai.OpenAiSkinAnalysisResult;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
@@ -91,23 +93,26 @@ public class OpenAiAnalysisService {
   }
 
   private EncodedImage convertToBase64(String imageUrl, String baseDir) {
-    if (imageUrl == null || imageUrl.isBlank()) {
-      log.error("imageUrl이 null 또는 비어있습니다.");
+    if (imageUrl == null || !imageUrl.startsWith("https://luna-skin-images.s3.ap-northeast-2.amazonaws.com/")) {
+      log.error("허용되지 않은 imageUrl 형식: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
 
     try {
-      URL url = new URL(imageUrl);
-      byte[] bytes = url.openStream().readAllBytes();
-      String base64Data = Base64.getEncoder().encodeToString(bytes);
-      String mimeType = resolveMimeTypeFromUrl(imageUrl);
-      return new EncodedImage(base64Data, mimeType);
+      URLConnection conn = new URL(imageUrl).openConnection();
+      conn.setConnectTimeout(5000);
+      conn.setReadTimeout(10000);
+      try (InputStream is = conn.getInputStream()) {
+        byte[] bytes = is.readNBytes(10 * 1024 * 1024); // 10MB 제한
+        String base64Data = Base64.getEncoder().encodeToString(bytes);
+        String mimeType = resolveMimeTypeFromUrl(imageUrl);
+        return new EncodedImage(base64Data, mimeType);
+      }
     } catch (IOException e) {
       log.error("이미지 다운로드 실패: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
     }
   }
-
   private String resolveMimeTypeFromUrl(String imageUrl) {
     String lower = imageUrl.toLowerCase();
     if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";

@@ -2,9 +2,11 @@ package com.luna.skin.domain.chat.service;
 
 import com.luna.skin.domain.chat.dto.request.CreateChatRoomRequest;
 import com.luna.skin.domain.chat.dto.response.ChatMessagePageResponse;
+import com.luna.skin.domain.chat.dto.response.ChatMessageResponse;
 import com.luna.skin.domain.chat.dto.response.ChatRoomListPageResponse;
 import com.luna.skin.domain.chat.dto.response.CreateChatRoomResponse;
 import com.luna.skin.domain.chat.dto.response.RenameChatRoomResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface ChatService {
 
@@ -44,6 +46,17 @@ public interface ChatService {
      * @param content 메시지 내용
      */
     void sendMessage(Long userId, Long chatRoomId, String content);
+
+    /**
+     * [파일/이미지 업로드 매서드]
+     * 파일을 저장하고 채팅 메시지로 남긴 뒤 브로드캐스트한다.
+     *
+     * @param userId 파일을 업로드하는 사용자 식별자 (소유자 검증용)
+     * @param chatRoomId 파일을 업로드할 채팅방 식별자
+     * @param file 업로드할 파일/이미지
+     * @return 생성된 채팅 메시지 응답 DTO
+     */
+    ChatMessageResponse uploadFile(Long userId, Long chatRoomId, MultipartFile file);
 
     /**
      * [대화 내역 조회 매서드]

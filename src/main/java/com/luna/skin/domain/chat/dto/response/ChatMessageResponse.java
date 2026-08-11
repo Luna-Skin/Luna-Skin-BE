@@ -16,6 +16,7 @@ public class ChatMessageResponse {
     private MessageRole role;
     private MessageType messageType;
     private String content;
+    private String fileUrl;
     private LocalDateTime createdAt;
 
     public static ChatMessageResponse from(AiChatMessage aiChatMessage) {
@@ -24,6 +25,7 @@ public class ChatMessageResponse {
                 .role(aiChatMessage.getRole())
                 .messageType(aiChatMessage.getMessageType())
                 .content(aiChatMessage.getContent())
+                .fileUrl(aiChatMessage.getFileUrl())
                 .createdAt(aiChatMessage.getCreatedAt())
                 .build();
     }

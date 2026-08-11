@@ -3,6 +3,7 @@ package com.luna.skin.domain.chat.controller;
 import com.luna.skin.domain.chat.dto.request.CreateChatRoomRequest;
 import com.luna.skin.domain.chat.dto.request.RenameChatRoomRequest;
 import com.luna.skin.domain.chat.dto.response.ChatMessagePageResponse;
+import com.luna.skin.domain.chat.dto.response.ChatMessageResponse;
 import com.luna.skin.domain.chat.dto.response.ChatRoomListPageResponse;
 import com.luna.skin.domain.chat.dto.response.CreateChatRoomResponse;
 import com.luna.skin.domain.chat.dto.response.RenameChatRoomResponse;
@@ -15,8 +16,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "Chat", description = "AI 채팅방 API")
 @RestController
@@ -106,6 +109,23 @@ public class ChatController {
                 .renameChatRoom(currentUserProvider.getCurrentUserId(), roomId, request.getTitle());
 
         return ResponseEntity.status(HttpStatus.OK).body(BaseResponse.success(response));
+    }
+
+    @PostMapping(value = "/files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "파일, 이미지 업로드",
+            description = "본인 소유의 채팅방에 파일/이미지를 업로드하고 메시지로 저장 후 실시간 브로드캐스트합니다. "
+                    + "본인 소유가 아니면 403이 반환됩니다. X-USER-ID 헤더에 유저 ID를 입력해 테스트하세요. 예: X-USER-ID: 1"
+    )
+    public ResponseEntity<BaseResponse<ChatMessageResponse>> uploadFile(
+            @Parameter(description = "파일을 업로드할 채팅방 식별자", example = "1")
+            @RequestParam Long roomId,
+            @RequestPart("file") MultipartFile file
+    ) {
+        ChatMessageResponse response = chatService
+                .uploadFile(currentUserProvider.getCurrentUserId(), roomId, file);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(BaseResponse.success(response));
     }
 
     @PostMapping("/rooms/analyses/{analysisId}")

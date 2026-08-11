@@ -20,6 +20,7 @@ import com.luna.skin.domain.chat.repository.AiChatRoomRepository;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.domain.user.repository.UserRepository;
 import com.luna.skin.global.exception.CustomException;
+import com.luna.skin.global.storage.ImageStorageService;
 import com.luna.skin.infra.openai.OpenAiChatClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -50,6 +52,7 @@ public class ChatServiceImpl implements ChatService {
     private final DetailedSkinAnalysisRepository detailedSkinAnalysisRepository;
     private final OpenAiChatClient openAiChatClient;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ImageStorageService imageStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -174,6 +177,52 @@ public class ChatServiceImpl implements ChatService {
         broadcastAfterCommit(chatRoomId, ChatMessageResponse.from(aiMessage));
 
         log.info("[ChatService] 메시지 전송 - 완료: chatRoomId={}", chatRoomId);
+    }
+
+    @Override
+    public ChatMessageResponse uploadFile(Long userId, Long chatRoomId, MultipartFile file) {
+
+        log.info("[ChatService] 파일 업로드 - 시작: chatRoomId={}", chatRoomId);
+
+        AiChatRoom aiChatRoom = aiChatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> {
+                    log.error("[ChatService] 파일 업로드 - 에러: 해당 채팅방 식별자를 찾을 수 없습니다. chatRoomId={}", chatRoomId);
+                    return new CustomException(ChatErrorCode.CHAT_ROOM_NOT_FOUND);
+                });
+
+        if (!aiChatRoom.getUser().getUserId().equals(userId)) {
+            log.error("[ChatService] 파일 업로드 - 에러: 본인 소유의 채팅방이 아닙니다. userId={}, chatRoomId={}", userId, chatRoomId);
+            throw new CustomException(ChatErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        }
+
+        if (file == null || file.isEmpty()) {
+            log.error("[ChatService] 파일 업로드 - 에러: 파일이 비어있습니다. chatRoomId={}", chatRoomId);
+            throw new CustomException(ChatErrorCode.CHAT_FILE_EMPTY);
+        }
+
+        String fileUrl = imageStorageService.store(file, "chat");
+        MessageType messageType = isImage(file) ? MessageType.IMAGE : MessageType.FILE;
+
+        AiChatMessage fileMessage = AiChatMessage.builder()
+                .chatRoom(aiChatRoom)
+                .role(MessageRole.USER)
+                .messageType(messageType)
+                .content(file.getOriginalFilename())
+                .fileUrl(fileUrl)
+                .build();
+        aiChatMessageRepository.save(fileMessage);
+
+        ChatMessageResponse response = ChatMessageResponse.from(fileMessage);
+        broadcastAfterCommit(chatRoomId, response);
+
+        log.info("[ChatService] 파일 업로드 - 완료: chatRoomId={}", chatRoomId);
+
+        return response;
+    }
+
+    private boolean isImage(MultipartFile file) {
+        String contentType = file.getContentType();
+        return contentType != null && contentType.startsWith("image/");
     }
 
     // 트랜잭션 커밋 이후에만 브로드캐스트 (롤백 시 존재하지 않는 메시지가 클라이언트에 노출되는 것 방지)

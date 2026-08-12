@@ -3,6 +3,7 @@ package com.luna.skin.domain.user.controller;
 import com.luna.skin.domain.user.dto.request.UserSkinInfoUpdateRequest;
 import com.luna.skin.domain.user.dto.response.UserResponse;
 import com.luna.skin.domain.user.dto.response.UserSkinInfoResponse;
+import com.luna.skin.domain.user.dto.response.UserSkinProfileResponse;
 import com.luna.skin.domain.user.service.UserService;
 import com.luna.skin.global.response.BaseResponse;
 import com.luna.skin.global.security.CurrentUserProvider;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "User", description = "유저 API")
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/users/me")
 @RequiredArgsConstructor
 public class UserController {
 
@@ -48,6 +49,15 @@ public class UserController {
 
         return ResponseEntity.status(HttpStatus.OK)
                 .body(BaseResponse.success(skinInfo));
+    }
+
+    @Operation(summary = "홈 헤더 프로필 조회", description = "홈 화면 헤더에서 사용자 이름과 선택된 피부 태그를 조회합니다.")
+    @GetMapping("/skin-profile")
+    public ResponseEntity<BaseResponse<UserSkinProfileResponse>> getSkinProfile() {
+        UserSkinProfileResponse response = userService
+                .getSkinProfile(currentUserProvider.getCurrentUserId());
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(BaseResponse.success(response));
     }
 
     @Operation(summary = "피부 정보 수정", description = "사용자의 피부 타입과 피부 고민을 수정합니다.")

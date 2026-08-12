@@ -1,6 +1,7 @@
 package com.luna.skin.domain.user.controller;
 
 import com.luna.skin.domain.user.dto.request.UserSkinInfoUpdateRequest;
+import com.luna.skin.domain.user.dto.response.UserResponse;
 import com.luna.skin.domain.user.dto.response.UserSkinInfoResponse;
 import com.luna.skin.domain.user.service.UserService;
 import com.luna.skin.global.response.BaseResponse;
@@ -25,6 +26,19 @@ public class UserController {
 
     private final UserService userService;
     private final CurrentUserProvider currentUserProvider;
+
+    @Operation(summary = "유저 정보 조회", description = "마이페이지에서 사용자의 정보를 조회합니다.")
+    @GetMapping
+    public ResponseEntity<BaseResponse<UserResponse>> getUserInfo() {
+
+        UserResponse userInfo = userService
+                .getUserInfo(currentUserProvider.getCurrentUserId());
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(userInfo));
+    }
+
 
     @Operation(summary = "피부 정보 조회", description = "사용자의 피부타입과 피부 고민을 조회합니다.")
     @GetMapping("/skin")

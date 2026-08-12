@@ -35,6 +35,9 @@ public class User extends BaseTimeEntity {
     @Column(name = "default_cycle_length", nullable = false)
     private Integer defaultCycleLength = 28;
 
+    @Column(name = "profile_image_url", length = 500)
+    private String profileImageUrl;
+
     public void updateCycleSettings(int periodDuration, int cycleLength) {
         this.defaultPeriodDuration = periodDuration;
         this.defaultCycleLength = cycleLength;

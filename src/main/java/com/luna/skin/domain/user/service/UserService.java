@@ -1,6 +1,7 @@
 package com.luna.skin.domain.user.service;
 
 import com.luna.skin.domain.user.dto.request.UserSkinInfoUpdateRequest;
+import com.luna.skin.domain.user.dto.response.UserResponse;
 import com.luna.skin.domain.user.dto.response.UserSkinInfoResponse;
 import com.luna.skin.domain.user.entity.SkinConcern;
 import com.luna.skin.domain.user.entity.SkinType;
@@ -34,6 +35,20 @@ public class UserService {
     private final SkinConcernRepository skinConcernRepository;
     private final UserSkinConcernRepository userSkinConcernRepository;
     private final UserSkinTypeRepository userSkinTypeRepository;
+
+
+    public UserResponse getUserInfo(Long currentUserId) {
+
+        log.warn("[내 프로필 조회] currnetUserId = {}", currentUserId);
+
+        User user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> {
+                    log.warn("[내 프로필 조회] 사용자를 찾을 수 없습니다. currentUserId = {}", currentUserId);
+                    return new CustomException(UserErrorCode.USER_NOT_FOUND);
+                });
+
+        return UserResponse.from(user);
+    }
 
     public UserSkinInfoResponse getSkinInfo(Long currentUserId) {
 

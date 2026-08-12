@@ -3,6 +3,7 @@ package com.luna.skin.domain.user.service;
 import com.luna.skin.domain.user.dto.request.UserSkinInfoUpdateRequest;
 import com.luna.skin.domain.user.dto.response.UserResponse;
 import com.luna.skin.domain.user.dto.response.UserSkinInfoResponse;
+import com.luna.skin.domain.user.dto.response.UserSkinProfileResponse;
 import com.luna.skin.domain.user.entity.SkinConcern;
 import com.luna.skin.domain.user.entity.SkinType;
 import com.luna.skin.domain.user.entity.User;
@@ -66,12 +67,34 @@ public class UserService {
 
         // 사용자가 선택한 항목 ID Set
         Set<Long> selectedTypeIds = userSkinTypeRepository.findBySkinType(currentUserId)
-                .stream().map(SkinType::getSkinTypeId).collect(Collectors.toSet());
+                .map(SkinType::getSkinTypeId)
+                .map(Set::of)
+                .orElse(Set.of());
 
         Set<Long> selectedConcernIds = userSkinConcernRepository.findBySkinConcern(currentUserId)
                 .stream().map(SkinConcern::getSkinConcernId).collect(Collectors.toSet());
 
         return UserSkinInfoResponse.of(allTypes, selectedTypeIds, allConcerns, selectedConcernIds);
+    }
+
+    public UserSkinProfileResponse getSkinProfile(Long currentUserId) {
+
+        log.info("[홈 헤더 조회] currentUserId = {}", currentUserId);
+
+        User user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> {
+                    log.warn("[홈 헤더 조회] 사용자를 찾을 수 없습니다. userId = {}", currentUserId);
+                    return new CustomException(UserErrorCode.USER_NOT_FOUND);
+                });
+
+        // 혹시 피부 타입 선택을 안했다면 null
+        String skinType = userSkinTypeRepository.findBySkinType(currentUserId)
+                .map(SkinType::getTypeName).orElse(null);
+
+        List<String> selectedSkinConcerns = userSkinConcernRepository.findBySkinConcern(currentUserId)
+                .stream().map(SkinConcern::getConcernName).toList();
+
+        return UserSkinProfileResponse.from(user.getName(), skinType, selectedSkinConcerns);
     }
 
     @Transactional
@@ -85,15 +108,15 @@ public class UserService {
                     return new CustomException(UserErrorCode.USER_NOT_FOUND);
                 });
 
-        List<SkinType> skinTypes = skinTypeRepository.findAllById(request.getSkinTypeIds());
-        if (skinTypes.size() != request.getSkinTypeIds().size()) {
-            log.warn("[피부 정보 수정] 우효하지 않는 스킨타입이 있습니다.");
-            throw new CustomException(UserErrorCode.INVALID_SKIN_TYPE);
-        }
+        SkinType skinType = skinTypeRepository.findById(request.getSkinTypeId())
+                .orElseThrow(() -> {
+                    log.warn("[피부 정보 수정] 유효하지 않는 스킨타입입니다.");
+                    return new CustomException(UserErrorCode.INVALID_SKIN_TYPE);
+                });
 
         List<SkinConcern> skinConcerns = skinConcernRepository.findAllById(request.getSkinConcernIds());
         if (skinConcerns.size() != request.getSkinConcernIds().size()) {
-            log.warn("[피부 정보 수정] 우효하지 않는 피부고민이 있습니다.");
+            log.warn("[피부 정보 수정] 유효하지 않는 피부고민이 있습니다.");
             throw new CustomException(UserErrorCode.INVALID_SKIN_CONCERN);
         }
 
@@ -103,8 +126,7 @@ public class UserService {
         userSkinConcernRepository.deleteAllByUserUserId(currentUserId);
 
         // 다시 저장
-        userSkinTypeRepository.saveAll(
-                skinTypes.stream().map(st -> UserSkinType.of(user, st)).toList());
+        userSkinTypeRepository.save(UserSkinType.of(user, skinType));
         userSkinConcernRepository.saveAll(
                 skinConcerns.stream().map(sc -> UserSkinConcern.of(user, sc)).toList());
     }

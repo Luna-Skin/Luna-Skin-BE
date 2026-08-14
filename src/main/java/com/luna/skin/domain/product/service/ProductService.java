@@ -5,6 +5,7 @@ import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
 import com.luna.skin.domain.analysis.repository.DetailedSkinAnalysisRepository;
 import com.luna.skin.domain.product.dto.response.ProductRecommendResponse;
+import com.luna.skin.domain.product.exception.ProductErrorCode;
 import com.luna.skin.domain.product.repository.ProductRepository;
 import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.infra.openai.service.OpenAiAnalysisService;
@@ -32,7 +33,7 @@ public class ProductService {
     DetailedSkinAnalysis detail = aiAnalysisRepository
         .findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, date)
         .flatMap(detailedSkinAnalysisRepository::findByAiAnalysis)
-        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+        .orElseThrow(() -> new CustomException(ProductErrorCode.PRODUCT_NOT_FOUND));
 
     List<String> ingredients = openAiAnalysisService.recommendIngredients(
         detail.getTrouble(), detail.getSebum(), detail.getDullness(),

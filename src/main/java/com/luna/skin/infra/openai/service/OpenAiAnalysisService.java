@@ -3,6 +3,7 @@ package com.luna.skin.infra.openai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luna.skin.domain.analysis.exception.AnalysisErrorCode;
+import com.luna.skin.domain.product.exception.ProductErrorCode;
 import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.infra.openai.OpenAiSkinAnalysisResult;
 import java.io.IOException;
@@ -258,8 +259,7 @@ public class OpenAiAnalysisService {
       return objectMapper.readValue(content, List.class);
     } catch (Exception e) {
       log.error("제품 추천 ingredient 선택 실패: {}", e.getMessage(), e);
-      // fallback: 점수 낮은 순
-      return List.of("트러블 완화", "보습");
+      throw new CustomException(ProductErrorCode.RECOMMEND_FAILED);
     }
   }
 }

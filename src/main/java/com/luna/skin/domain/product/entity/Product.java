@@ -22,9 +22,6 @@ public class Product extends BaseTimeEntity {
     @Column(name = "purpose", length = 50)
     private String purpose;
 
-    @Column(name = "price")
-    private Integer price;
-
-    @Column(name = "image_url")
-    private String imageUrl;
+    @Column(name = "purchase_url", length = 500)
+    private String purchaseUrl;
 }

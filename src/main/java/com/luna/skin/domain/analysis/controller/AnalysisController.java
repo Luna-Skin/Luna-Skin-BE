@@ -29,19 +29,21 @@ import com.luna.skin.global.security.CurrentUserProvider;
 
 @Tag(name = "Analysis", description = "AI 분석 API")
 @RestController
-@RequestMapping("/api/analyses")
+@RequestMapping("/api/analysis")
 @RequiredArgsConstructor
 public class AnalysisController {
 
   private final AnalysisService analysisService;
   private final CurrentUserProvider currentUserProvider;
 
-  @Operation(summary = "피부 사진 업로드", description = "피부 사진을 업로드하고 image_url을 반환하는 API")
-  @PostMapping(value = "/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-  public ResponseEntity<BaseResponse<ImageUploadResponse>> uploadImage(
-      @RequestPart("image") MultipartFile image){
+  @Operation(summary = "피부 사진 업로드", description = "정면(필수), 왼쪽/오른쪽 측면(선택) 사진을 업로드하고 URL을 반환하는 API")
+  @PostMapping(value = "/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<BaseResponse<ImageUploadResponse>> uploadImages(
+      @Parameter(description = "정면 사진 (필수)") @RequestPart("image") MultipartFile image,
+      @Parameter(description = "왼쪽 측면 사진 (선택)") @RequestPart(value = "leftImage", required = false) MultipartFile leftImage,
+      @Parameter(description = "오른쪽 측면 사진 (선택)") @RequestPart(value = "rightImage", required = false) MultipartFile rightImage) {
     Long userId = currentUserProvider.getCurrentUserId();
-    return ResponseEntity.ok(BaseResponse.success(analysisService.uploadImage(userId, image)));
+    return ResponseEntity.ok(BaseResponse.success(analysisService.uploadImages(userId, image, leftImage, rightImage)));
   }
 
   @Operation(summary = "일별 피부 분석", description = "오늘의 생활 기록과 사진으로 AI 피부 분석하는 API")

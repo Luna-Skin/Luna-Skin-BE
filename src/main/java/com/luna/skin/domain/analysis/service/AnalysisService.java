@@ -55,12 +55,21 @@ public class AnalysisService {
   @Lazy
   private AnalysisService self;
 
-  public ImageUploadResponse uploadImage(Long userId, MultipartFile image) {
+  public ImageUploadResponse uploadImages(Long userId, MultipartFile image,
+      MultipartFile leftImage, MultipartFile rightImage) {
     validateImageFile(image);
     log.info("userId: {} 사진 업로드", userId);
+
     String imageUrl = imageStorageService.store(image, "analysis");
+    String leftImageUrl = leftImage != null && !leftImage.isEmpty()
+        ? imageStorageService.store(leftImage, "analysis") : null;
+    String rightImageUrl = rightImage != null && !rightImage.isEmpty()
+        ? imageStorageService.store(rightImage, "analysis") : null;
+
     return ImageUploadResponse.builder()
         .imageUrl(imageUrl)
+        .leftImageUrl(leftImageUrl)
+        .rightImageUrl(rightImageUrl)
         .build();
   }
 
@@ -80,7 +89,10 @@ public class AnalysisService {
     OpenAiSkinAnalysisResult gptResult;
     try {
       gptResult = openAiAnalysisService.analyzeSkin(
-          request.getImageUrl(), reservation.phaseType(), storageProperties.baseDir());
+          request.getImageUrl(),
+          request.getLeftImageUrl(),
+          request.getRightImageUrl(),
+          reservation.phaseType());
     } catch (RuntimeException e) {
       self.cancelReservation(reservation.todaySkinId());
       throw e;
@@ -107,6 +119,8 @@ public class AnalysisService {
         .user(user)
         .logDate(date)
         .imageUrl(request.getImageUrl())
+        .leftImageUrl(request.getLeftImageUrl())
+        .rightImageUrl(request.getRightImageUrl())
         .sleepTime(request.getSleepTime())
         .waterIntake(request.getWaterIntake())
         .dietType(dietTypeStr)
@@ -203,10 +217,17 @@ public class AnalysisService {
     DetailedSkinAnalysis detailB = detailedSkinAnalysisRepository.findByAiAnalysis(analysisB)
         .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
 
+    String aiComment = openAiAnalysisService.generateCompareComment(
+        analysisA.getOverallScore(), detailA.getTrouble(), detailA.getSebum(),
+        detailA.getDullness(), detailA.getMoisture(), detailA.getElasticity(),
+        analysisB.getOverallScore(), detailB.getTrouble(), detailB.getSebum(),
+        detailB.getDullness(), detailB.getMoisture(), detailB.getElasticity());
+
     return SkinCompareResponse.builder()
         .dateA(toSnapshot(analysisA, detailA))
         .dateB(toSnapshot(analysisB, detailB))
         .changes(toChanges(detailA, detailB))
+        .aiComment(aiComment)
         .build();
   }
 
@@ -265,6 +286,8 @@ public class AnalysisService {
         .analysisId(aiAnalysis.getAnalysisId())
         .date(todaySkin.getLogDate().toString())
         .imageUrl(todaySkin.getImageUrl())
+        .leftImageUrl(todaySkin.getLeftImageUrl())
+        .rightImageUrl(todaySkin.getRightImageUrl())
         .overallScore(aiAnalysis.getOverallScore())
         .skinStatus(label != null ? label.toLabel() : "모름")
         .cyclePhase(phaseType)

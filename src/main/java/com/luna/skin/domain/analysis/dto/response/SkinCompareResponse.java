@@ -17,6 +17,9 @@ public class SkinCompareResponse {
   @Schema(description = "항목별 변화 방향")
   private MetricChanges changes;
 
+  @Schema(description = "두 날짜를 종합한 AI 분석 코멘트", nullable = true)
+  private String aiComment;
+
   @Getter @Builder
   @Schema(description = "날짜별 피부 스냅샷")
   public static class DaySnapshot {

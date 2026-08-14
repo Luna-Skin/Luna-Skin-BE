@@ -19,10 +19,18 @@ import lombok.NoArgsConstructor;
 @Schema(description = "피부 분석 요청")
 public class SkinAnalysisRequest {
 
-  @Schema(description = "업로드된 사진 URL", example = "/files/analysis/uuid.png")
+  @Schema(description = "업로드된 사진 URL (정면)", example = "/files/analysis/uuid.png")
   @JsonProperty("imageUrl")
-  @NotBlank(message = "imageUrl은 필수입니다.")
+  @NotBlank(message = "정면 사진은 필수입니다.")
   private String imageUrl;
+
+  @Schema(description = "왼쪽 측면 사진 URL", nullable = true)
+  @JsonProperty("leftImageUrl")
+  private String leftImageUrl;
+
+  @Schema(description = "오른쪽 측면 사진 URL", nullable = true)
+  @JsonProperty("rightImageUrl")
+  private String rightImageUrl;
 
   @Schema(description = "수면 시간 (시간)", example = "7")
   private Integer sleepTime;

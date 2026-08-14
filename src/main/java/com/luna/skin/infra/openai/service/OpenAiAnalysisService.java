@@ -11,6 +11,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Base64;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,31 +40,45 @@ public class OpenAiAnalysisService {
   @Value("${luna-skin.ai.openai.model}")
   private String model;
 
-  public OpenAiSkinAnalysisResult analyzeSkin(String imageUrl, String phaseType, String baseDir) {
+  public OpenAiSkinAnalysisResult analyzeSkin(String imageUrl, String leftImageUrl, String rightImageUrl, String phaseType) {
     String prompt = buildPrompt(phaseType);
 
-    // URL → 실제 파일 경로 변환 후 base64 인코딩
-    EncodedImage image = convertToBase64(imageUrl, baseDir);
-    String dataUrl = "data:" + image.mimeType() + ";base64," + image.base64Data();
+    // 정면 사진 (필수)
+    EncodedImage frontImage = convertToBase64(imageUrl);
+
+    // content 리스트 구성
+    List<Map<String, Object>> content = new ArrayList<>();
+    content.add(Map.of("type", "text", "text", prompt));
+    content.add(Map.of("type", "image_url", "image_url",
+        Map.of("url", "data:" + frontImage.mimeType() + ";base64," + frontImage.base64Data())));
+
+    // 측면 사진 (선택)
+    if (leftImageUrl != null && !leftImageUrl.isBlank()) {
+      EncodedImage leftImage = convertToBase64(leftImageUrl);
+      content.add(Map.of("type", "image_url", "image_url",
+          Map.of("url", "data:" + leftImage.mimeType() + ";base64," + leftImage.base64Data())));
+    }
+    if (rightImageUrl != null && !rightImageUrl.isBlank()) {
+      EncodedImage rightImage = convertToBase64(rightImageUrl);
+      content.add(Map.of("type", "image_url", "image_url",
+          Map.of("url", "data:" + rightImage.mimeType() + ";base64," + rightImage.base64Data())));
+    }
 
     Map<String, Object> requestBody = Map.of(
         "model", model,
         "response_format", Map.of("type", "json_object"),
         "messages", List.of(
-            Map.of("role", "user", "content", List.of(
-                Map.of("type", "text", "text", prompt),
-                Map.of("type", "image_url", "image_url", Map.of("url", dataUrl))
-            ))
+            Map.of("role", "user", "content", content)
         )
     );
 
     try {
       Map response = openAiRestTemplate.postForObject(
           endpoint + "/chat/completions", requestBody, Map.class);
-      String content = (String) ((Map) ((Map) ((List) ((Map) response).get("choices")).get(0))
+      String responseContent = (String) ((Map) ((Map) ((List) ((Map) response).get("choices")).get(0))
           .get("message")).get("content");
 
-      JsonNode root = objectMapper.readTree(content);
+      JsonNode root = objectMapper.readTree(responseContent);
       validateGptResponse(root);
       return objectMapper.treeToValue(root, OpenAiSkinAnalysisResult.class);
     } catch (Exception e) {
@@ -92,7 +107,7 @@ public class OpenAiAnalysisService {
     }
   }
 
-  private EncodedImage convertToBase64(String imageUrl, String baseDir) {
+  private EncodedImage convertToBase64(String imageUrl) {
     if (imageUrl == null || !imageUrl.startsWith("https://luna-skin-images.s3.ap-northeast-2.amazonaws.com/")) {
       log.error("허용되지 않은 imageUrl 형식: {}", imageUrl);
       throw new CustomException(AnalysisErrorCode.GPT_ANALYSIS_FAILED);
@@ -161,5 +176,44 @@ public class OpenAiAnalysisService {
             "phase_comment": "위 규칙에 따른 주기 단계별 부위 진단 코멘트"
           }
           """.formatted(phaseType);
+  }
+
+
+  public String generateCompareComment(
+      int overallScoreA, int troubleA, int sebumA, int dullnessA, int moistureA, int elasticityA,
+      int overallScoreB, int troubleB, int sebumB, int dullnessB, int moistureB, int elasticityB) {
+
+    String prompt = String.format("""
+      다음은 두 날짜의 피부 분석 결과입니다.
+
+      [날짜 A]
+      종합 점수: %d, 트러블: %d, 유분: %d, 칙칙함: %d, 수분: %d, 탄력: %d
+
+      [날짜 B]
+      종합 점수: %d, 트러블: %d, 유분: %d, 칙칙함: %d, 수분: %d, 탄력: %d
+
+      두 날짜의 피부 변화를 바탕으로 현재 피부 상태와 케어 방법을 2~3문장으로 조언해주세요.
+      친근하고 실용적인 말투로 작성하고, 수치는 언급하지 마세요.
+      """,
+        overallScoreA, troubleA, sebumA, dullnessA, moistureA, elasticityA,
+        overallScoreB, troubleB, sebumB, dullnessB, moistureB, elasticityB);
+
+    Map<String, Object> requestBody = Map.of(
+        "model", model,
+        "messages", List.of(
+            Map.of("role", "user", "content", prompt)
+        ),
+        "max_tokens", 300
+    );
+
+    try {
+      Map response = openAiRestTemplate.postForObject(
+          endpoint + "/chat/completions", requestBody, Map.class);
+      return (String) ((Map) ((Map) ((List) ((Map) response).get("choices")).get(0))
+          .get("message")).get("content");
+    } catch (Exception e) {
+      log.error("비교 코멘트 생성 실패: {}", e.getMessage(), e);
+      return null;
+    }
   }
 }

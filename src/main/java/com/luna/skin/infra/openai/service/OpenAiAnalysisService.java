@@ -228,4 +228,38 @@ public class OpenAiAnalysisService {
       return null;
     }
   }
+
+  public List<String> recommendIngredients(
+      int trouble, int sebum, int dullness, int moisture, int elasticity) {
+
+    String prompt = String.format("""
+      다음은 사용자의 피부 분석 점수입니다. (0~100, 높을수록 좋음)
+      트러블: %d, 유분: %d, 칙칙함: %d, 수분: %d, 탄력: %d
+
+      아래 카테고리 중 이 사용자에게 가장 필요한 2가지를 우선순위 순서로 골라주세요.
+      반드시 아래 목록에서만 선택하고, JSON 배열 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요.
+
+      선택 가능한 카테고리: ["트러블 완화", "피지 조절", "톤 개선", "보습", "탄력 강화"]
+
+      응답 예시: ["트러블 완화", "보습"]
+      """, trouble, sebum, dullness, moisture, elasticity);
+
+    Map<String, Object> requestBody = Map.of(
+        "model", model,
+        "messages", List.of(Map.of("role", "user", "content", prompt)),
+        "max_tokens", 50
+    );
+
+    try {
+      Map response = openAiRestTemplate.postForObject(
+          endpoint + "/chat/completions", requestBody, Map.class);
+      String content = (String) ((Map) ((Map) ((List) response.get("choices")).get(0))
+          .get("message")).get("content");
+      return objectMapper.readValue(content, List.class);
+    } catch (Exception e) {
+      log.error("제품 추천 ingredient 선택 실패: {}", e.getMessage(), e);
+      // fallback: 점수 낮은 순
+      return List.of("트러블 완화", "보습");
+    }
+  }
 }

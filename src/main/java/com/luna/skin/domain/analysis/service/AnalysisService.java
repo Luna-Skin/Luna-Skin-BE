@@ -58,6 +58,8 @@ public class AnalysisService {
   public ImageUploadResponse uploadImages(Long userId, MultipartFile image,
       MultipartFile leftImage, MultipartFile rightImage) {
     validateImageFile(image);
+    if (leftImage != null && !leftImage.isEmpty()) validateImageFile(leftImage);
+    if (rightImage != null && !rightImage.isEmpty()) validateImageFile(rightImage);
     log.info("userId: {} 사진 업로드", userId);
 
     String imageUrl = imageStorageService.store(image, "analysis");

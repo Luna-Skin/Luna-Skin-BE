@@ -97,6 +97,18 @@ public class OpenAiAnalysisService {
       if (value < 0 || value > 100) {
         throw new IllegalArgumentException(field + " 값이 0~100 범위를 벗어났습니다: " + value);
       }
+      // overall_score가 5개 지표 평균과 일치하는지 검증 (반올림 허용 ±2)
+      int expectedOverall = (int) Math.round(
+          (root.get("trouble").intValue()
+              + root.get("sebum").intValue()
+              + root.get("dullness").intValue()
+              + root.get("moisture").intValue()
+              + root.get("elasticity").intValue()) / 5.0);
+      int actualOverall = root.get("overall_score").intValue();
+      if (Math.abs(actualOverall - expectedOverall) > 2) {
+        throw new IllegalArgumentException(
+            "overall_score(" + actualOverall + ")가 5개 지표 평균(" + expectedOverall + ")과 일치하지 않습니다.");
+      }
     }
 
     for (String field : COMMENT_FIELDS) {

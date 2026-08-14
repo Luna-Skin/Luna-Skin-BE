@@ -78,8 +78,8 @@ public class AnalysisController {
   @Operation(summary = "피부 기록 비교", description = "두 날짜의 피부 분석 결과를 비교하는 API")
   @GetMapping("/compare")
   public ResponseEntity<BaseResponse<SkinCompareResponse>> compare(
-      @Parameter(description = "기준 날짜", example = "2026-08-01") @RequestParam LocalDate dateA,
-      @Parameter(description = "비교 날짜", example = "2026-08-07") @RequestParam LocalDate dateB) {
+      @Parameter(description = "기준 날짜", example = "2026-08-01") @RequestParam("dateA") LocalDate dateA,
+      @Parameter(description = "비교 날짜", example = "2026-08-07") @RequestParam("dateB") LocalDate dateB) {
     Long userId = currentUserProvider.getCurrentUserId();
     return ResponseEntity.ok(BaseResponse.success(analysisService.compare(userId, dateA, dateB)));
   }

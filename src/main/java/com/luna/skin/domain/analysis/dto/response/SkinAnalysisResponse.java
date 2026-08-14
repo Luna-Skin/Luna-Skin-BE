@@ -12,8 +12,14 @@ public class SkinAnalysisResponse {
   @Schema(description = "분석 ID", example = "1")
   private Long analysisId;
 
-  @Schema(description = "사진 URL", nullable = true)
+  @Schema(description = "정면 사진 URL", nullable = true)
   private String imageUrl;
+
+  @Schema(description = "왼쪽 측면 사진 URL", nullable = true)
+  private String leftImageUrl;
+
+  @Schema(description = "오른쪽 측면 사진 URL", nullable = true)
+  private String rightImageUrl;
 
   @Schema(description = "분석 날짜", example = "2026-08-08")
   private String date;

@@ -2,11 +2,13 @@ package com.luna.skin.infra.openai;
 
 import com.luna.skin.domain.chat.entity.AiChatMessage;
 import com.luna.skin.domain.chat.enums.MessageRole;
+import com.luna.skin.domain.chat.enums.MessageType;
 import com.luna.skin.domain.chat.exception.ChatErrorCode;
 import com.luna.skin.global.exception.CustomException;
 import com.luna.skin.infra.openai.dto.OpenAiChatRequest;
 import com.luna.skin.infra.openai.dto.OpenAiChatResponse;
-import com.luna.skin.infra.openai.dto.OpenAiMessage;
+import com.luna.skin.infra.openai.dto.OpenAiContentPart;
+import com.luna.skin.infra.openai.dto.OpenAiRequestMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,9 +66,9 @@ public class OpenAiChatClient {
                 ? SYSTEM_PROMPT
                 : SYSTEM_PROMPT + "\n\n" + analysisContext;
 
-        List<OpenAiMessage> messages = Stream.concat(
-                Stream.of(new OpenAiMessage("system", systemPrompt)),
-                history.stream().map(this::toOpenAiMessage)
+        List<OpenAiRequestMessage> messages = Stream.concat(
+                Stream.of(new OpenAiRequestMessage("system", systemPrompt)),
+                history.stream().map(this::toRequestMessage)
         ).toList();
 
         OpenAiChatRequest request = new OpenAiChatRequest(model, messages);
@@ -82,8 +84,24 @@ public class OpenAiChatClient {
         }
     }
 
-    private OpenAiMessage toOpenAiMessage(AiChatMessage message) {
+    private OpenAiRequestMessage toRequestMessage(AiChatMessage message) {
         String role = message.getRole() == MessageRole.AI ? "assistant" : "user";
-        return new OpenAiMessage(role, message.getContent());
+
+        if (message.getMessageType() == MessageType.IMAGE && message.getFileUrl() != null) {
+            String caption = (message.getContent() == null || message.getContent().isBlank())
+                    ? "이미지를 업로드했어요."
+                    : message.getContent();
+            List<OpenAiContentPart> content = List.of(
+                    OpenAiContentPart.text(caption),
+                    OpenAiContentPart.imageUrl(message.getFileUrl())
+            );
+            return new OpenAiRequestMessage(role, content);
+        }
+
+        if (message.getMessageType() == MessageType.FILE) {
+            return new OpenAiRequestMessage(role, "[파일 첨부: " + message.getContent() + "]");
+        }
+
+        return new OpenAiRequestMessage(role, message.getContent());
     }
 }

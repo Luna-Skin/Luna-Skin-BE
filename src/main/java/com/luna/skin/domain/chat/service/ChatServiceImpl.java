@@ -151,6 +151,16 @@ public class ChatServiceImpl implements ChatService {
         aiChatMessageRepository.save(userMessage);
         broadcastAfterCommit(chatRoomId, ChatMessageResponse.from(userMessage));
 
+        generateAndBroadcastAiReply(aiChatRoom);
+
+        log.info("[ChatService] 메시지 전송 - 완료: chatRoomId={}", chatRoomId);
+    }
+
+    // 최근 대화 이력을 바탕으로 AI 응답을 생성해 저장하고 브로드캐스트한다.
+    private void generateAndBroadcastAiReply(AiChatRoom aiChatRoom) {
+
+        Long chatRoomId = aiChatRoom.getChatRoomId();
+
         List<AiChatMessage> history = aiChatMessageRepository
                 .findByChatRoom_ChatRoomIdOrderByCreatedAtDesc(chatRoomId, PageRequest.of(0, OpenAiChatClient.MAX_HISTORY_SIZE))
                 .getContent()
@@ -162,7 +172,7 @@ public class ChatServiceImpl implements ChatService {
         try {
             aiReply = openAiChatClient.getReply(history, analysisContext);
         } catch (CustomException e) {
-            log.error("[ChatService] 메시지 전송 - AI 응답 실패: chatRoomId={}, message={}", chatRoomId, e.getMessage());
+            log.error("[ChatService] AI 응답 생성 - 실패: chatRoomId={}, message={}", chatRoomId, e.getMessage());
             broadcastAfterCommit(chatRoomId, ChatErrorResponse.of(e.getMessage()));
             return;
         }
@@ -175,8 +185,6 @@ public class ChatServiceImpl implements ChatService {
                 .build();
         aiChatMessageRepository.save(aiMessage);
         broadcastAfterCommit(chatRoomId, ChatMessageResponse.from(aiMessage));
-
-        log.info("[ChatService] 메시지 전송 - 완료: chatRoomId={}", chatRoomId);
     }
 
     @Override
@@ -214,6 +222,8 @@ public class ChatServiceImpl implements ChatService {
 
         ChatMessageResponse response = ChatMessageResponse.from(fileMessage);
         broadcastAfterCommit(chatRoomId, response);
+
+        generateAndBroadcastAiReply(aiChatRoom);
 
         log.info("[ChatService] 파일 업로드 - 완료: chatRoomId={}", chatRoomId);
 

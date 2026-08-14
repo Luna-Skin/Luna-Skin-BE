@@ -35,6 +35,12 @@ public class TodaySkin extends BaseTimeEntity {
     @Column(name = "image_url")
     private String imageUrl;
 
+    @Column(name = "left_image_url")
+    private String leftImageUrl;
+
+    @Column(name = "right_image_url")
+    private String rightImageUrl;
+
     @Column(name = "sleep_time")
     private Integer sleepTime;
 

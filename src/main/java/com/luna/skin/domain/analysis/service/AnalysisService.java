@@ -4,6 +4,7 @@ import com.luna.skin.domain.analysis.dto.request.SkinAnalysisRequest;
 import com.luna.skin.domain.analysis.dto.response.HomeSkinStatusResponse;
 import com.luna.skin.domain.analysis.dto.response.ImageUploadResponse;
 import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse;
+import com.luna.skin.domain.analysis.dto.response.SkinCompareResponse;
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.analysis.entity.DetailedSkinAnalysis;
 import com.luna.skin.domain.analysis.enums.SkinStatusLabel;
@@ -187,6 +188,59 @@ public class AnalysisService {
         .orElse(HomeSkinStatusResponse.builder()
             .skinStatus("모름")
             .build());
+  }
+
+  public SkinCompareResponse compare(Long userId, LocalDate dateA, LocalDate dateB) {
+    AiAnalysis analysisA = aiAnalysisRepository
+        .findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, dateA)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+    AiAnalysis analysisB = aiAnalysisRepository
+        .findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, dateB)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+
+    DetailedSkinAnalysis detailA = detailedSkinAnalysisRepository.findByAiAnalysis(analysisA)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+    DetailedSkinAnalysis detailB = detailedSkinAnalysisRepository.findByAiAnalysis(analysisB)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+
+    return SkinCompareResponse.builder()
+        .dateA(toSnapshot(analysisA, detailA))
+        .dateB(toSnapshot(analysisB, detailB))
+        .changes(toChanges(detailA, detailB))
+        .build();
+  }
+
+  private SkinCompareResponse.DaySnapshot toSnapshot(AiAnalysis analysis, DetailedSkinAnalysis detail) {
+    SkinStatusLabel label = analysis.getSkinStatusLabel();
+    return SkinCompareResponse.DaySnapshot.builder()
+        .date(analysis.getTodaySkin().getLogDate().toString())
+        .imageUrl(analysis.getTodaySkin().getImageUrl())
+        .overallScore(analysis.getOverallScore())
+        .skinStatus(label != null ? label.toLabel() : "모름")
+        .metrics(SkinCompareResponse.Metrics.builder()
+            .trouble(detail.getTrouble())
+            .sebum(detail.getSebum())
+            .dullness(detail.getDullness())
+            .moisture(detail.getMoisture())
+            .elasticity(detail.getElasticity())
+            .build())
+        .build();
+  }
+
+  private SkinCompareResponse.MetricChanges toChanges(DetailedSkinAnalysis a, DetailedSkinAnalysis b) {
+    return SkinCompareResponse.MetricChanges.builder()
+        .trouble(calcChange(a.getTrouble(), b.getTrouble()))
+        .sebum(calcChange(a.getSebum(), b.getSebum()))
+        .dullness(calcChange(a.getDullness(), b.getDullness()))
+        .moisture(calcChange(a.getMoisture(), b.getMoisture()))
+        .elasticity(calcChange(a.getElasticity(), b.getElasticity()))
+        .build();
+  }
+
+  private String calcChange(int before, int after) {
+    int diff = after - before;
+    if (Math.abs(diff) <= 5) return "SIMILAR";
+    return diff > 0 ? "IMPROVED" : "WORSENED";
   }
 
   private void validateImageFile(MultipartFile image) {

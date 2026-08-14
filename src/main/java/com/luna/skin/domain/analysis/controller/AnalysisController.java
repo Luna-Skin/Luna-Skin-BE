@@ -3,12 +3,13 @@ package com.luna.skin.domain.analysis.controller;
 import com.luna.skin.domain.analysis.dto.request.SkinAnalysisRequest;
 import com.luna.skin.domain.analysis.dto.response.HomeSkinStatusResponse;
 import com.luna.skin.domain.analysis.dto.response.ImageUploadResponse;
-import com.luna.skin.domain.analysis.dto.response.LifestyleInsightResponse;
 import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse;
+import com.luna.skin.domain.analysis.dto.response.SkinCompareResponse;
 import com.luna.skin.domain.analysis.service.AnalysisService;
 import com.luna.skin.global.response.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -69,5 +71,14 @@ public class AnalysisController {
   public ResponseEntity<BaseResponse<HomeSkinStatusResponse>> getTodaySkinStatus() {
     return ResponseEntity.ok(BaseResponse.success(
         analysisService.getTodaySkinStatus(currentUserProvider.getCurrentUserId())));
+  }
+
+  @Operation(summary = "피부 기록 비교", description = "두 날짜의 피부 분석 결과를 비교하는 API")
+  @GetMapping("/compare")
+  public ResponseEntity<BaseResponse<SkinCompareResponse>> compare(
+      @Parameter(description = "기준 날짜", example = "2026-08-01") @RequestParam LocalDate dateA,
+      @Parameter(description = "비교 날짜", example = "2026-08-07") @RequestParam LocalDate dateB) {
+    Long userId = currentUserProvider.getCurrentUserId();
+    return ResponseEntity.ok(BaseResponse.success(analysisService.compare(userId, dateA, dateB)));
   }
 }

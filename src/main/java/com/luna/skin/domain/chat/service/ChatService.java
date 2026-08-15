@@ -56,7 +56,7 @@ public interface ChatService {
      * @param file 업로드할 파일/이미지
      * @return 생성된 채팅 메시지 응답 DTO
      */
-    ChatMessageResponse uploadFile(Long userId, Long chatRoomId, MultipartFile file);
+    ChatMessageResponse uploadFile(Long userId, Long chatRoomId, MultipartFile file, String content);
 
     /**
      * [대화 내역 조회 매서드]

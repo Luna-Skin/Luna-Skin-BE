@@ -188,7 +188,7 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public ChatMessageResponse uploadFile(Long userId, Long chatRoomId, MultipartFile file) {
+    public ChatMessageResponse uploadFile(Long userId, Long chatRoomId, MultipartFile file, String content) {
 
         log.info("[ChatService] 파일 업로드 - 시작: chatRoomId={}", chatRoomId);
 
@@ -210,12 +210,13 @@ public class ChatServiceImpl implements ChatService {
 
         String fileUrl = imageStorageService.store(file, "chat");
         MessageType messageType = isImage(file) ? MessageType.IMAGE : MessageType.FILE;
+        String messageContent = (content != null && !content.isBlank()) ? content : file.getOriginalFilename();
 
         AiChatMessage fileMessage = AiChatMessage.builder()
                 .chatRoom(aiChatRoom)
                 .role(MessageRole.USER)
                 .messageType(messageType)
-                .content(file.getOriginalFilename())
+                .content(messageContent)
                 .fileUrl(fileUrl)
                 .build();
         aiChatMessageRepository.save(fileMessage);

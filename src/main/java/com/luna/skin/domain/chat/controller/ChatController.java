@@ -120,10 +120,12 @@ public class ChatController {
     public ResponseEntity<BaseResponse<ChatMessageResponse>> uploadFile(
             @Parameter(description = "파일을 업로드할 채팅방 식별자", example = "1")
             @RequestParam Long roomId,
-            @RequestPart("file") MultipartFile file
+            @RequestPart("file") MultipartFile file,
+            @Parameter(description = "파일과 함께 보낼 메시지 내용(선택)", example = "갑자기 여드름이 심해 났는데 뭘까요")
+            @RequestParam(required = false) String content
     ) {
         ChatMessageResponse response = chatService
-                .uploadFile(currentUserProvider.getCurrentUserId(), roomId, file);
+                .uploadFile(currentUserProvider.getCurrentUserId(), roomId, file, content);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(BaseResponse.success(response));
     }

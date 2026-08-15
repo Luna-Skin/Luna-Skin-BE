@@ -217,6 +217,8 @@ public class CycleService {
 
         // 기존에 있던 주기의 시작일을 변경 하는 경우
         if(targetMenstruation.isPresent()) {
+
+            // 기존 주기 조회
             MenstruationCycle menstruationCycle = targetMenstruation.get();
 
             // 시작일 갱신
@@ -235,9 +237,14 @@ public class CycleService {
                         cyclePhaseRepository.deleteAllByMenstruationCycle(prevCycle);
                         cyclePhaseRepository.saveAll(CyclePhase.of(prevCycle));
                     });
+
+            // 기존 주기의 시작일 업데이트
+            cyclePhaseRepository.deleteAllByMenstruationCycle(menstruationCycle);
+            cyclePhaseRepository.saveAll(CyclePhase.of(menstruationCycle));
             return;
         }
 
+        // 새로운 주기를 만드는 경우
 
         // 새로운 주기와 이전 주기의 차이( lastCycle의 실 주기 )
         int actualCycleLength = (int) ChronoUnit.DAYS

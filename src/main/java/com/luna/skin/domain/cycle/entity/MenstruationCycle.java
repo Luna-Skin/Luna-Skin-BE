@@ -42,21 +42,23 @@ public class MenstruationCycle extends BaseTimeEntity {
     @Builder.Default
     private Integer predictedCycleLength = 28;
 
-    // 시작일 갱신
-    public void updateStartDate(LocalDate newSartDate) {
-        this.cycleStartDate = newSartDate;
+    // 시작일 갱신으로 인한 생리 기간 재 계산
+    public void updateStartDate(LocalDate newStartDate) {
+        // 기존 생리 종료일 보존
+        LocalDate existingMenstruationEnd = this.cycleStartDate
+                .plusDays(this.periodDuration - 1);
+
+        this.cycleStartDate = newStartDate;
+        // 새 시작일 ~ 기존 종료일로 periodDuration 재계산
+        this.periodDuration = (int) ChronoUnit.DAYS.between(newStartDate,
+                existingMenstruationEnd) + 1;
     }
 
-    // 생리 기간 재 계산
-    public void updatePeriodDuration(LocalDate menstruationEndDate) {
+    // 생리 종료일 갱신으로 인한 생리 기간 재 계산
+    public void updateEndDate(LocalDate menstruationEndDate) {
         long daysBetween = ChronoUnit.DAYS.between(this.cycleStartDate,
                 menstruationEndDate);
         this.periodDuration = (int) daysBetween + 1;
-    }
-
-    // 종료일 갱신
-    public void updateEndDate(LocalDate newEndDate) {
-        this.cycleEndDate = newEndDate;
     }
 
     // 실제 주기 종료 시 갱신 (종료일, 실제 주기 길이)

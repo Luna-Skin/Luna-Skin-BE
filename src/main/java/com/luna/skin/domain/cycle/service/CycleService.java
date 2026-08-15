@@ -296,7 +296,7 @@ public class CycleService {
         }
 
         // 종료일 갱신으로 인한 생리기간 업데이트
-        targetMenstruation.updatePeriodDuration(endDate);
+        targetMenstruation.updateEndDate(endDate);
         // 주기 단계 갱신
         cyclePhaseRepository.deleteAllByMenstruationCycle(targetMenstruation);
         cyclePhaseRepository.saveAll(CyclePhase.of(targetMenstruation));

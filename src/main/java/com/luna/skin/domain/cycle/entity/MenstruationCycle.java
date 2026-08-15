@@ -1,7 +1,9 @@
 package com.luna.skin.domain.cycle.entity;
 
+import com.luna.skin.domain.cycle.exception.CycleErrorCode;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.global.entity.BaseTimeEntity;
+import com.luna.skin.global.exception.CustomException;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -217,7 +217,19 @@ public class CycleService {
 
         // 기존에 있던 주기의 시작일을 변경 하는 경우
         if(targetMenstruation.isPresent()) {
+
+            // 기존 주기 조회
             MenstruationCycle menstruationCycle = targetMenstruation.get();
+
+            // 기존 주기의 생리 종료일
+            LocalDate existingMenstruationEnd = menstruationCycle.getCycleStartDate()
+                    .plusDays(menstruationCycle.getPeriodDuration() - 1);
+
+            // 시작일 = 종료일 체크
+            if (!startDate.isBefore(existingMenstruationEnd)) {
+                log.warn("[생리 시작일 기록] 시작일과 종료일은 같을 수 없습니다. startDate = {}", startDate);
+                throw new CustomException(CycleErrorCode.START_AND_END_DATE_CANNOT_BE_SAME);
+            }
 
             // 시작일 갱신
             menstruationCycle.updateStartDate(startDate);
@@ -235,9 +247,14 @@ public class CycleService {
                         cyclePhaseRepository.deleteAllByMenstruationCycle(prevCycle);
                         cyclePhaseRepository.saveAll(CyclePhase.of(prevCycle));
                     });
+
+            // 기존 주기의 시작일 업데이트
+            cyclePhaseRepository.deleteAllByMenstruationCycle(menstruationCycle);
+            cyclePhaseRepository.saveAll(CyclePhase.of(menstruationCycle));
             return;
         }
 
+        // 새로운 주기를 만드는 경우
 
         // 새로운 주기와 이전 주기의 차이( lastCycle의 실 주기 )
         int actualCycleLength = (int) ChronoUnit.DAYS
@@ -289,7 +306,7 @@ public class CycleService {
         }
 
         // 종료일 갱신으로 인한 생리기간 업데이트
-        targetMenstruation.updatePeriodDuration(endDate);
+        targetMenstruation.updateEndDate(endDate);
         // 주기 단계 갱신
         cyclePhaseRepository.deleteAllByMenstruationCycle(targetMenstruation);
         cyclePhaseRepository.saveAll(CyclePhase.of(targetMenstruation));

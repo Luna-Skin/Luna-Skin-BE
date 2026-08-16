@@ -6,10 +6,12 @@ services:
       POSTGRES_DB: lunaskin
       POSTGRES_USER: ${DB_USERNAME:-lunaskin}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-lunaskin123}
+      TZ: Asia/Seoul # 컨테이너 OS 타임존 설정
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    command: postgres -c timezone=Asia/Seoul # PostgreSQL 내부 설정으로 타임존 강제 고정
 
   app:
     build: .
@@ -22,6 +24,7 @@ services:
       - .env
     environment:
       DB_URL: jdbc:postgresql://db:5432/lunaskin
+      TZ: Asia/Seoul
 
 volumes:
   postgres_data:

@@ -132,7 +132,10 @@ public class AnalysisService {
     try {
       todaySkinRepository.save(todaySkin);
     } catch (DataIntegrityViolationException e) {
-      throw new CustomException(AnalysisErrorCode.ALREADY_ANALYZED);
+      if (e.getMessage() != null && e.getMessage().contains("uq_today_skin_user_date")) {
+        throw new CustomException(AnalysisErrorCode.ALREADY_ANALYZED);
+      }
+      throw e;
     }
 
     CyclePhase cyclePhase = cyclePhaseRepository.findByCyclePhaseAtNow(userId, date)

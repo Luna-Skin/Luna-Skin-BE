@@ -31,4 +31,9 @@ public class OpenAiSkinAnalysisResult {
 
   @JsonProperty("phase_comment")
   private String phaseComment;
+
+  public OpenAiSkinAnalysisResult withOverallScore(int overallScore) {
+    this.overallScore = overallScore;
+    return this;
+  }
 }

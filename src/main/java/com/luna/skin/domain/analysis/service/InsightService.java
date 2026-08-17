@@ -12,7 +12,6 @@ import com.luna.skin.domain.cycle.entity.MenstruationCycle;
 import com.luna.skin.domain.cycle.enums.PhaseType;
 import com.luna.skin.domain.cycle.repository.CyclePhaseRepository;
 import com.luna.skin.domain.cycle.repository.MenstruationCycleRepository;
-import com.luna.skin.domain.skin.enums.ExerciseTime;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -194,14 +193,14 @@ public class InsightService {
         "수면 6시간 미만", "트러블 ↑", "트러블 ↓");
 
     addFactorIfSignificant(factors, analyses, detailMap,
-        a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() < 7,
-        a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() >= 7,
+        a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() < 1.5,
+        a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() >= 1.5,
         DetailedSkinAnalysis::getMoisture,
         "수분 섭취 부족", "건조도 ↑", "건조도 ↓");
 
     addFactorIfSignificant(factors, analyses, detailMap,
-        a -> a.getTodaySkin().getExerciseTime() == ExerciseTime.ZERO_M,
-        a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() != ExerciseTime.ZERO_M,
+        a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() == 0,
+        a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() > 0,
         DetailedSkinAnalysis::getDullness,
         "운동 부족", "칙칙함 ↑", "칙칙함 ↓");
 

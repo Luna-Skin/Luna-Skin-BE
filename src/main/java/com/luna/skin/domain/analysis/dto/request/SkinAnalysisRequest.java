@@ -2,7 +2,6 @@ package com.luna.skin.domain.analysis.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.luna.skin.domain.skin.enums.DietType;
-import com.luna.skin.domain.skin.enums.ExerciseTime;
 import com.luna.skin.domain.skin.enums.SkinStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -35,14 +34,14 @@ public class SkinAnalysisRequest {
   @Schema(description = "수면 시간 (시간)", example = "7")
   private Integer sleepTime;
 
-  @Schema(description = "수분 섭취 (잔)", example = "8")
-  private Integer waterIntake;
-
   @Schema(description = "식단 유형 (복수 선택)", example = "[\"DAIRY\", \"CAFFEINE\"]")
   private List<DietType> dietType;
 
-  @Schema(description = "운동량", example = "THIRTY_M")
-  private ExerciseTime exerciseTime;
+  @Schema(description = "수분 섭취 (L)", example = "0.5")
+  private Double waterIntake;
+
+  @Schema(description = "운동 시간 (분)", example = "90")
+  private Integer exerciseTime;
 
   @Schema(description = "피부 상태", example = "OILY")
   private SkinStatus skinStatus;

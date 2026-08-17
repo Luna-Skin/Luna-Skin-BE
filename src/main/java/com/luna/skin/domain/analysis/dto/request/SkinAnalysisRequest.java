@@ -31,8 +31,8 @@ public class SkinAnalysisRequest {
   @JsonProperty("rightImageUrl")
   private String rightImageUrl;
 
-  @Schema(description = "수면 시간 (시간)", example = "7")
-  private Integer sleepTime;
+  @Schema(description = "수면 시간 (시간)", example = "7.5")
+  private Double sleepTime;
 
   @Schema(description = "식단 유형 (복수 선택)", example = "[\"DAIRY\", \"CAFFEINE\"]")
   private List<DietType> dietType;

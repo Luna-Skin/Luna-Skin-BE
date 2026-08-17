@@ -41,7 +41,7 @@ public class TodaySkin extends BaseTimeEntity {
     private String rightImageUrl;
 
     @Column(name = "sleep_time")
-    private Integer sleepTime;
+    private Double sleepTime;
 
     @Column(name = "water_intake")
     private Double waterIntake;

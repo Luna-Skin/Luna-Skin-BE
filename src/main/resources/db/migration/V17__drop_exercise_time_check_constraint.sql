@@ -1,0 +1,1 @@
+ALTER TABLE today_skin DROP CONSTRAINT IF EXISTS chk_exercise_time;

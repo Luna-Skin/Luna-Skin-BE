@@ -1,6 +1,5 @@
 package com.luna.skin.domain.skin.entity;
 
-import com.luna.skin.domain.skin.enums.ExerciseTime;
 import com.luna.skin.domain.skin.enums.SkinStatus;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.global.entity.BaseTimeEntity;
@@ -45,14 +44,13 @@ public class TodaySkin extends BaseTimeEntity {
     private Integer sleepTime;
 
     @Column(name = "water_intake")
-    private Integer waterIntake;
+    private Double waterIntake;
 
     @Column(name = "diet_type")
     private String dietType; // "DAIRY,CAFFEINE,SPICY_FOOD" 형태로 저장
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "exercise_time")
-    private ExerciseTime exerciseTime;
+    @Column(name = "exercise_time", columnDefinition = "integer")
+    private Integer exerciseTime;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "skin_status")

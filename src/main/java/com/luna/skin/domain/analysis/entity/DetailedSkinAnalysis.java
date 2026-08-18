@@ -38,4 +38,14 @@ public class DetailedSkinAnalysis extends BaseTimeEntity {
 
     @Column(name = "elasticity")
     private Integer elasticity;
+
+    // 같은 날짜 재분석 시 기존 상세 지표를 덮어쓰기 위한 갱신
+    public void update(Integer trouble, Integer sebum, Integer dullness,
+        Integer moisture, Integer elasticity) {
+        this.trouble = trouble;
+        this.sebum = sebum;
+        this.dullness = dullness;
+        this.moisture = moisture;
+        this.elasticity = elasticity;
+    }
 }

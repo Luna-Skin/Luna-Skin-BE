@@ -38,4 +38,13 @@ public class AiAnalysis extends BaseTimeEntity {
 
     @Column(name = "ai_comment", columnDefinition = "TEXT")
     private String aiComment;
+
+    // 같은 날짜 재분석 시 기존 분석 결과를 덮어쓰기 위한 갱신
+    public void update(Integer overallScore, SkinStatusLabel skinStatusLabel,
+        String aiComment, String phaseComment) {
+        this.overallScore = overallScore;
+        this.skinStatusLabel = skinStatusLabel;
+        this.aiComment = aiComment;
+        this.phaseComment = phaseComment;
+    }
 }

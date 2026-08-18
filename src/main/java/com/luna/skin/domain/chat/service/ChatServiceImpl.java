@@ -44,6 +44,7 @@ public class ChatServiceImpl implements ChatService {
 
     private static final String CHAT_ROOM_TOPIC_PREFIX = "/topic/chat/";
     private static final DateTimeFormatter TITLE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy년 M월 d일");
+    private static final String GENERAL_WELCOME_MESSAGE = "안녕하세요! 끼끼의 피부상담소입니다.\n무엇이 궁금하신가요?";
 
     private final AiChatRoomRepository aiChatRoomRepository;
     private final AiChatMessageRepository aiChatMessageRepository;
@@ -97,11 +98,25 @@ public class ChatServiceImpl implements ChatService {
                 .aiAnalysis(aiAnalysis)
                 .build();
 
-        CreateChatRoomResponse response = CreateChatRoomResponse.from(aiChatRoomRepository.save(aiChatRoom));
+        AiChatRoom savedChatRoom = aiChatRoomRepository.save(aiChatRoom);
+        saveWelcomeMessage(savedChatRoom, GENERAL_WELCOME_MESSAGE);
+
+        CreateChatRoomResponse response = CreateChatRoomResponse.from(savedChatRoom);
 
         log.info("[ChatService] 채팅방 생성 - 완료: 채팅방 제목={}", createChatRoomRequest.getTitle());
 
         return response;
+    }
+
+    // 채팅방 생성 시 안내 메시지를 AI 메시지로 저장한다.
+    private void saveWelcomeMessage(AiChatRoom aiChatRoom, String content) {
+        AiChatMessage welcomeMessage = AiChatMessage.builder()
+                .chatRoom(aiChatRoom)
+                .role(MessageRole.AI)
+                .messageType(MessageType.TEXT)
+                .content(content)
+                .build();
+        aiChatMessageRepository.save(welcomeMessage);
     }
 
     @Override
@@ -317,13 +332,19 @@ public class ChatServiceImpl implements ChatService {
 
         AiChatRoom aiChatRoom = aiChatRoomRepository.findByUser_UserIdAndAiAnalysis_AnalysisId(userId, analysisId)
                 .orElseGet(() -> {
-                    String title = aiAnalysis.getTodaySkin().getLogDate().format(TITLE_DATE_FORMATTER) + " 피부 상담";
+                    String logDate = aiAnalysis.getTodaySkin().getLogDate().format(TITLE_DATE_FORMATTER);
+                    String title = logDate + " 피부 상담";
                     AiChatRoom newRoom = AiChatRoom.builder()
                             .user(user)
                             .title(title)
                             .aiAnalysis(aiAnalysis)
                             .build();
-                    return aiChatRoomRepository.save(newRoom);
+                    AiChatRoom savedNewRoom = aiChatRoomRepository.save(newRoom);
+
+                    String analysisWelcomeMessage = "오늘의 분석 결과에서 어떤 부분이 궁금하신가요?\n→ " + logDate + " 투데이스킨 첨부됨";
+                    saveWelcomeMessage(savedNewRoom, analysisWelcomeMessage);
+
+                    return savedNewRoom;
                 });
 
         log.info("[ChatService] 분석 기반 채팅방 조회/생성 - 완료: chatRoomId={}", aiChatRoom.getChatRoomId());

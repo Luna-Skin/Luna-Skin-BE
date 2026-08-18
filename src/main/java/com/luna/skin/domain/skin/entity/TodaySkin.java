@@ -55,4 +55,18 @@ public class TodaySkin extends BaseTimeEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "skin_status")
     private SkinStatus skinStatus;
+
+    // 같은 날짜 재분석 시 기존 기록을 덮어쓰기 위한 갱신
+    public void update(String imageUrl, String leftImageUrl, String rightImageUrl,
+        Double sleepTime, Double waterIntake, String dietType, Integer exerciseTime,
+        SkinStatus skinStatus) {
+        this.imageUrl = imageUrl;
+        this.leftImageUrl = leftImageUrl;
+        this.rightImageUrl = rightImageUrl;
+        this.sleepTime = sleepTime;
+        this.waterIntake = waterIntake;
+        this.dietType = dietType;
+        this.exerciseTime = exerciseTime;
+        this.skinStatus = skinStatus;
+    }
 }

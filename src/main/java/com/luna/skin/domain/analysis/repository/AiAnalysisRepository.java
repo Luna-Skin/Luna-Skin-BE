@@ -37,6 +37,9 @@ public interface AiAnalysisRepository extends JpaRepository<AiAnalysis, Long> {
 
     Optional<AiAnalysis> findByTodaySkinUserUserIdAndTodaySkinLogDate(Long userId, LocalDate logDate);
 
+    // 재분석(덮어쓰기) 시 같은 today_skin의 기존 분석 결과 조회
+    Optional<AiAnalysis> findByTodaySkin_TodaySkinId(Long todaySkinId);
+
     @Query("select an from AiAnalysis an join fetch an.todaySkin ts where ts.user.userId = :userId")
     List<AiAnalysis> findAllByUserIdWithTodaySkin(@Param("userId") Long userId);
 

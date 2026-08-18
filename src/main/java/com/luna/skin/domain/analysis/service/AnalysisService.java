@@ -106,7 +106,8 @@ public class AnalysisService {
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public ReservationResult reserveTodaySkin(Long userId, LocalDate date, SkinAnalysisRequest request) {
-    String dietTypeStr = request.getDietType() == null ? null :
+    // dietType이 빈 리스트로 오면 ""가 되어 chk_diet_type 제약을 위반하므로 null로 처리
+    String dietTypeStr = request.getDietType() == null || request.getDietType().isEmpty() ? null :
         request.getDietType().stream()
             .map(Enum::name)
             .collect(Collectors.joining(","));

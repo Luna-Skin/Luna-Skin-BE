@@ -15,7 +15,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 
+import java.util.Base64;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -41,12 +44,16 @@ public class OpenAiChatClient {
     public static final int MAX_HISTORY_SIZE = 20;
 
     private final RestTemplate openAiRestTemplate;
+    private final S3Client s3Client;
 
     @Value("${luna-skin.ai.openai.endpoint}")
     private String endpoint;
 
     @Value("${luna-skin.ai.openai.model}")
     private String model;
+
+    @Value("${spring.cloud.aws.s3.bucket}")
+    private String bucket;
 
     /**
      * @param history 시간순(오래된순)으로 정렬되고 최근 {@value #MAX_HISTORY_SIZE}개 이하로
@@ -93,7 +100,7 @@ public class OpenAiChatClient {
                     : message.getContent();
             List<OpenAiContentPart> content = List.of(
                     OpenAiContentPart.text(caption),
-                    OpenAiContentPart.imageUrl(message.getFileUrl())
+                    OpenAiContentPart.imageUrl(toDataUri(message.getFileUrl()))
             );
             return new OpenAiRequestMessage(role, content);
         }
@@ -103,5 +110,52 @@ public class OpenAiChatClient {
         }
 
         return new OpenAiRequestMessage(role, message.getContent());
+    }
+
+    // S3 버킷이 비공개라 OpenAI가 이미지 URL을 직접 가져올 수 없으므로, 서버가 대신 다운로드해 base64 데이터 URI로 변환한다.
+    private String toDataUri(String imageUrl) {
+        String s3BaseUrl = "https://" + bucket + ".s3.ap-northeast-2.amazonaws.com/";
+        if (!imageUrl.startsWith(s3BaseUrl)) {
+            return imageUrl;
+        }
+
+        byte[] bytes;
+        try {
+            String key = imageUrl.substring(s3BaseUrl.length());
+            bytes = s3Client.getObjectAsBytes(
+                    GetObjectRequest.builder().bucket(bucket).key(key).build()
+            ).asByteArray();
+        } catch (Exception e) {
+            log.error("[OpenAiChatClient] 채팅 이미지 다운로드 실패: {}", imageUrl, e);
+            throw new CustomException(ChatErrorCode.AI_RESPONSE_FAILED);
+        }
+
+        String mimeType = detectMimeType(bytes);
+        if (mimeType == null) {
+            log.error("[OpenAiChatClient] 지원하지 않는 이미지 형식: {}", imageUrl);
+            throw new CustomException(ChatErrorCode.CHAT_UNSUPPORTED_IMAGE_FORMAT);
+        }
+
+        return "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(bytes);
+    }
+
+    // 파일 확장자 대신 실제 바이트 시그니처로 판별한다. 확장자가 없거나(모바일 업로드 등) 실제 포맷과 달라도
+    // 정확히 판별하기 위함이며, OpenAI가 지원하는 png/jpeg/gif/webp가 아니면 null을 반환한다.
+    private String detectMimeType(byte[] bytes) {
+        if (bytes.length >= 8 && (bytes[0] & 0xFF) == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) {
+            return "image/png";
+        }
+        if (bytes.length >= 3 && (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF) {
+            return "image/jpeg";
+        }
+        if (bytes.length >= 3 && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F') {
+            return "image/gif";
+        }
+        if (bytes.length >= 12
+                && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F'
+                && bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P') {
+            return "image/webp";
+        }
+        return null;
     }
 }

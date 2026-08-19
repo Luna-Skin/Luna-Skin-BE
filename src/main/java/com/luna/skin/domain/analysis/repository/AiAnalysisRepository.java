@@ -50,4 +50,7 @@ public interface AiAnalysisRepository extends JpaRepository<AiAnalysis, Long> {
         @Param("userId") Long userId,
         @Param("startDate") LocalDate startDate,
         @Param("endDate") LocalDate endDate);
+
+    // 채팅에서 "내 피부 분석"처럼 물어볼 때 참고할, 유저의 가장 최근 분석 기록 조회
+    Optional<AiAnalysis> findFirstByTodaySkin_User_UserIdOrderByTodaySkin_LogDateDesc(Long userId);
 }

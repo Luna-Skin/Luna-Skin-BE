@@ -15,7 +15,8 @@ public enum ChatErrorCode implements ErrorCode {
     CHAT_ANALYSIS_ACCESS_DENIED("CHAT_ANALYSIS_403", "본인의 분석 기록만 조회할 수 있습니다.", HttpStatus.FORBIDDEN),
     AI_RESPONSE_FAILED("CHAT_AI_502", "AI 응답을 받아오지 못했습니다.", HttpStatus.BAD_GATEWAY),
     CHAT_FILE_EMPTY("CHAT_FILE_400", "파일이 비어있습니다.", HttpStatus.BAD_REQUEST),
-    CHAT_UNSUPPORTED_IMAGE_FORMAT("CHAT_IMAGE_400", "지원하지 않는 이미지 형식이에요. JPG, PNG, GIF, WEBP로 다시 시도해주세요.", HttpStatus.BAD_REQUEST);
+    CHAT_UNSUPPORTED_IMAGE_FORMAT("CHAT_IMAGE_400", "지원하지 않는 이미지 형식이에요. JPG, PNG, GIF, WEBP로 다시 시도해주세요.", HttpStatus.BAD_REQUEST),
+    CHAT_ROOM_CREATE_CONFLICT("CHAT_ROOM_409", "이미 채팅방이 생성 중이에요. 잠시 후 다시 시도해주세요.", HttpStatus.CONFLICT);
 
     private final String code;
     private final String message;

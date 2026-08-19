@@ -22,6 +22,8 @@ public interface ChatService {
 
     /**
      * [채팅방 생성 매서드]
+     * aiAnalysis가 주어지면 find-or-create로 동작한다 — 해당 유저가 그 분석에 대해 이미 만든 방이
+     * 있으면 그 방을 그대로 반환하고, 없으면 새로 만든다. aiAnalysis가 없으면(일반 채팅) 항상 새로 만든다.
      *
      * @param userId
      * @param createChatRoomRequest title, analysis_id(선택)

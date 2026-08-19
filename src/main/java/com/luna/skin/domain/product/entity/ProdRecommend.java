@@ -2,6 +2,8 @@ package com.luna.skin.domain.product.entity;
 
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -9,6 +11,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "prod_recommend")
 @Getter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class ProdRecommend {
 
     @Id

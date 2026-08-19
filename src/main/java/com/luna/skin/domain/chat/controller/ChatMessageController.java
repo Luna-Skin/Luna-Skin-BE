@@ -32,6 +32,7 @@ public class ChatMessageController {
         Long userId = (Long) headerAccessor.getSessionAttributes().get("userId");
         Long chatRoomId = (Long) headerAccessor.getSessionAttributes().get("chatRoomId");
 
-        chatService.sendMessage(userId, chatRoomId, request.getContent());
+        chatService.saveUserMessage(userId, chatRoomId, request.getContent());
+        chatService.generateAiReply(userId, chatRoomId);
     }
 }

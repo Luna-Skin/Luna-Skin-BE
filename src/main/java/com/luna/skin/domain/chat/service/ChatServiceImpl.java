@@ -45,6 +45,13 @@ public class ChatServiceImpl implements ChatService {
     private static final String CHAT_ROOM_TOPIC_PREFIX = "/topic/chat/";
     private static final DateTimeFormatter TITLE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy년 M월 d일");
     private static final String GENERAL_WELCOME_MESSAGE = "안녕하세요! 끼끼의 피부상담소입니다.\n무엇이 궁금하신가요?";
+    private static final List<String> ANALYSIS_INTENT_KEYWORDS = List.of(
+            "피부 분석", "분석 결과", "내 분석", "제 분석",
+            "분석해줘", "분석 알려줘", "분석 보여줘", "내 피부 상태"
+    );
+    private static final String NO_ANALYSIS_FOUND_CONTEXT =
+            "사용자가 자신의 피부 분석 결과를 물어봤지만 아직 등록된 피부 분석 기록이 없습니다. " +
+                    "투데이 스킨 분석을 먼저 진행해달라고 안내하세요.";
 
     private final AiChatRoomRepository aiChatRoomRepository;
     private final AiChatMessageRepository aiChatMessageRepository;
@@ -142,7 +149,7 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public void sendMessage(Long userId, Long chatRoomId, String content) {
+    public void saveUserMessage(Long userId, Long chatRoomId, String content) {
 
         log.info("[ChatService] 메시지 전송 - 시작: chatRoomId={}", chatRoomId);
 
@@ -166,9 +173,28 @@ public class ChatServiceImpl implements ChatService {
         aiChatMessageRepository.save(userMessage);
         broadcastAfterCommit(chatRoomId, ChatMessageResponse.from(userMessage));
 
+        log.info("[ChatService] 메시지 전송 - 완료: chatRoomId={}", chatRoomId);
+    }
+
+    @Override
+    public void generateAiReply(Long userId, Long chatRoomId) {
+
+        log.info("[ChatService] AI 응답 생성 - 시작: chatRoomId={}", chatRoomId);
+
+        AiChatRoom aiChatRoom = aiChatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> {
+                    log.error("[ChatService] AI 응답 생성 - 에러: 해당 채팅방 식별자를 찾을 수 없습니다. chatRoomId={}", chatRoomId);
+                    return new CustomException(ChatErrorCode.CHAT_ROOM_NOT_FOUND);
+                });
+
+        if (!aiChatRoom.getUser().getUserId().equals(userId)) {
+            log.error("[ChatService] AI 응답 생성 - 에러: 본인 소유의 채팅방이 아닙니다. userId={}, chatRoomId={}", userId, chatRoomId);
+            throw new CustomException(ChatErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        }
+
         generateAndBroadcastAiReply(aiChatRoom);
 
-        log.info("[ChatService] 메시지 전송 - 완료: chatRoomId={}", chatRoomId);
+        log.info("[ChatService] AI 응답 생성 - 완료: chatRoomId={}", chatRoomId);
     }
 
     // 최근 대화 이력을 바탕으로 AI 응답을 생성해 저장하고 브로드캐스트한다.
@@ -181,7 +207,7 @@ public class ChatServiceImpl implements ChatService {
                 .getContent()
                 .reversed();
 
-        String analysisContext = buildAnalysisContext(aiChatRoom);
+        String analysisContext = buildAnalysisContext(aiChatRoom, history);
 
         String aiReply;
         try {
@@ -352,11 +378,24 @@ public class ChatServiceImpl implements ChatService {
         return CreateChatRoomResponse.from(aiChatRoom);
     }
 
-    // 채팅방이 분석 기록과 연결되어 있으면 그날의 지표를 AI 시스템 프롬프트에 덧붙일 컨텍스트로 만든다.
-    private String buildAnalysisContext(AiChatRoom aiChatRoom) {
+    // 채팅방이 분석 기록과 연결되어 있으면 그날의 지표를, 아니면 사용자가 "내 피부 분석"처럼 물어볼 때
+    // 가장 최근 분석 기록을 조회해 AI 시스템 프롬프트에 덧붙일 컨텍스트로 만든다.
+    private String buildAnalysisContext(AiChatRoom aiChatRoom, List<AiChatMessage> history) {
         AiAnalysis aiAnalysis = aiChatRoom.getAiAnalysis();
+
         if (aiAnalysis == null) {
-            return null;
+            if (!isLatestMessageAnalysisIntent(history)) {
+                return null;
+            }
+
+            Long userId = aiChatRoom.getUser().getUserId();
+            aiAnalysis = aiAnalysisRepository
+                    .findFirstByTodaySkin_User_UserIdOrderByTodaySkin_LogDateDesc(userId)
+                    .orElse(null);
+
+            if (aiAnalysis == null) {
+                return NO_ANALYSIS_FOUND_CONTEXT;
+            }
         }
 
         StringBuilder context = new StringBuilder()
@@ -378,6 +417,20 @@ public class ChatServiceImpl implements ChatService {
         context.append(". 이 기록을 참고해서 사용자의 질문에 답변하세요.");
 
         return context.toString();
+    }
+
+    // 방금 사용자가 보낸 메시지가 "내 피부 분석"처럼 자신의 분석 결과를 묻는 의도인지 확인한다.
+    private boolean isLatestMessageAnalysisIntent(List<AiChatMessage> history) {
+        if (history.isEmpty()) {
+            return false;
+        }
+
+        AiChatMessage latestMessage = history.get(history.size() - 1);
+        if (latestMessage.getRole() != MessageRole.USER || latestMessage.getContent() == null) {
+            return false;
+        }
+
+        return ANALYSIS_INTENT_KEYWORDS.stream().anyMatch(latestMessage.getContent()::contains);
     }
 
 }

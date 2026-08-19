@@ -38,14 +38,24 @@ public interface ChatService {
     void deleteChatRoom(Long userId, Long chatRoomId);
 
     /**
-     * [메시지 전송 매서드]
-     * 유저 메시지를 저장 후 브로드캐스트하고, OpenAI 응답을 받아 저장 후 브로드캐스트한다.
+     * [유저 메시지 저장 매서드]
+     * 유저 메시지를 저장하고 브로드캐스트한다. AI 응답 생성(generateAiReply)과 별도 트랜잭션으로
+     * 분리되어 있어, 유저 메시지가 AI 응답보다 먼저 클라이언트에 도착한다.
      *
      * @param userId 메시지를 보내는 사용자 식별자 (소유자 검증용)
      * @param chatRoomId 메시지를 보낼 채팅방 식별자
      * @param content 메시지 내용
      */
-    void sendMessage(Long userId, Long chatRoomId, String content);
+    void saveUserMessage(Long userId, Long chatRoomId, String content);
+
+    /**
+     * [AI 응답 생성 매서드]
+     * 최근 대화 이력을 바탕으로 OpenAI 응답을 생성해 저장 후 브로드캐스트한다.
+     *
+     * @param userId 요청 사용자 식별자 (소유자 검증용)
+     * @param chatRoomId AI 응답을 생성할 채팅방 식별자
+     */
+    void generateAiReply(Long userId, Long chatRoomId);
 
     /**
      * [파일/이미지 업로드 매서드]

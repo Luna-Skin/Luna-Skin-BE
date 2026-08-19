@@ -120,6 +120,8 @@ public class InsightService {
    * 누적 평균을 계산하여 반환한다.
    *
    * - FOLLICULAR(여포기) 제외 — 분석 의미 있는 3단계만 대상
+   * - trouble/sebum/dullness는 AI 원점수(높을수록 좋음)를 (100 - 점수)로 뒤집어서 "심한 정도"로 반환.
+   *   moisture/elasticity는 원래부터 높을수록 좋은 의미라 그대로 반환.
    * - 전체 phase 날짜 범위를 한 번에 조회하여 N+1 방지
    * - 데이터 없는 메트릭은 null 반환
    *
@@ -357,13 +359,19 @@ public class InsightService {
   }
 
   private CycleDetailResponse.Metrics toAverageMetrics(List<DetailedSkinAnalysis> details) {
+    // trouble/sebum/dullness는 AI 원점수(높을수록 좋음)를 그대로 노출하지 않고, "심한 정도"로 뒤집어서 보여준다.
+    // moisture/elasticity는 원래부터 높을수록 좋은 의미라 그대로 노출한다.
     return CycleDetailResponse.Metrics.builder()
-        .trouble(roundToInt(avgMetricValue(details, d -> d.getTrouble() != null ? d.getTrouble().doubleValue() : null)))
-        .sebum(roundToInt(avgMetricValue(details, d -> d.getSebum() != null ? d.getSebum().doubleValue() : null)))
-        .dullness(roundToInt(avgMetricValue(details, d -> d.getDullness() != null ? d.getDullness().doubleValue() : null)))
+        .trouble(invertScore(roundToInt(avgMetricValue(details, d -> d.getTrouble() != null ? d.getTrouble().doubleValue() : null))))
+        .sebum(invertScore(roundToInt(avgMetricValue(details, d -> d.getSebum() != null ? d.getSebum().doubleValue() : null))))
+        .dullness(invertScore(roundToInt(avgMetricValue(details, d -> d.getDullness() != null ? d.getDullness().doubleValue() : null))))
         .moisture(roundToInt(avgMetricValue(details, d -> d.getMoisture() != null ? d.getMoisture().doubleValue() : null)))
         .elasticity(roundToInt(avgMetricValue(details, d -> d.getElasticity() != null ? d.getElasticity().doubleValue() : null)))
         .build();
+  }
+
+  private Integer invertScore(Integer score) {
+    return score != null ? 100 - score : null;
   }
 
   private String phaseLabel(PhaseType pt) {

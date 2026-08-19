@@ -12,6 +12,7 @@ import com.luna.skin.domain.cycle.entity.MenstruationCycle;
 import com.luna.skin.domain.cycle.enums.PhaseType;
 import com.luna.skin.domain.cycle.repository.CyclePhaseRepository;
 import com.luna.skin.domain.cycle.repository.MenstruationCycleRepository;
+import com.luna.skin.domain.skin.entity.TodaySkin;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -162,12 +163,14 @@ public class InsightService {
 
   /**
    * [생활습관 영향 분석 조회]
-   * 유저의 가장 최근 분석 기록("오늘")을 그 이전 전체 기록의 평균("baseline")과 비교해서,
-   * baseline보다 뚜렷하게(5 이상) 나빠지거나 좋아진 피부 지표를 찾는다. 트러블/건조도/칙칙함은
-   * 각각 최대 1개 factor로만 나가며, 그 지표에 매칭되는 습관은 오늘 그 지표 방향에 해당하는
-   * 습관들(나빠졌으면 오늘 기준치 미달 습관, 좋아졌으면 기준치 충족 습관) 중 이 유저의 과거
-   * 기록에서 그 지표와 가장 상관관계가 컸던(양호군·불량군 평균 차이가 가장 큰) 습관 하나로 고른다.
+   * 생활습관이 하나라도 기록된 가장 최근 분석을 "오늘"로 잡고(진짜 최신 기록이라도 습관 입력이
+   * 아예 없으면 건너뜀), 그 이전 전체 기록의 평균("baseline")과 비교해서 baseline보다 뚜렷하게
+   * (5 이상) 나빠지거나 좋아진 피부 지표를 찾는다. 트러블/건조도/칙칙함은 각각 최대 1개 factor로만
+   * 나가며, 그 지표에 매칭되는 습관은 오늘 그 지표 방향에 해당하는 습관들(나빠졌으면 오늘 기준치
+   * 미달 습관, 좋아졌으면 기준치 충족 습관) 중 이 유저의 과거 기록에서 그 지표와 가장 상관관계가
+   * 컸던(양호군·불량군 평균 차이가 가장 큰) 습관 하나로 고른다.
    *
+   * - 습관이 기록된 분석이 없으면(전부 미입력) 빈 배열
    * - 비교할 과거 기록(baseline)이 없으면(분석이 1건 이하) 빈 배열
    * - 지표가 뚜렷하게 변하지 않았거나, 매칭할 습관 근거가 없으면 그 지표는 factor로 안 나감
    * - 결과는 캐싱되며 새 분석 저장 시 evict
@@ -182,9 +185,16 @@ public class InsightService {
       return LifestyleInsightResponse.builder().factors(List.of()).build();
     }
 
+    // "오늘"은 생활습관이 하나라도 기록된 가장 최근 분석으로 잡는다.
+    // 진짜 최신 기록에 습관 입력이 아예 없으면(분석만 하고 습관은 안 채운 날) 매칭할 게 없으니,
+    // 습관이 있는 가장 최근 기록으로 대신 비교한다.
     AiAnalysis latest = analyses.stream()
+        .filter(a -> hasAnyHabitData(a.getTodaySkin()))
         .max(Comparator.comparing(a -> a.getTodaySkin().getLogDate()))
-        .orElseThrow();
+        .orElse(null);
+    if (latest == null) {
+      return LifestyleInsightResponse.builder().factors(List.of()).build();
+    }
 
     Map<Long, DetailedSkinAnalysis> detailMap = detailedSkinAnalysisRepository
         .findAllByAiAnalysisIn(analyses).stream()
@@ -360,6 +370,14 @@ public class InsightService {
   private boolean hasGoodFood(String diet) {
     if (diet == null) return false;
     return Arrays.stream(diet.split(",")).noneMatch(BAD_FOODS::contains);
+  }
+
+  /** 수면/수분/운동/식단 중 하나라도 기록돼 있는지 */
+  private boolean hasAnyHabitData(TodaySkin todaySkin) {
+    return todaySkin.getSleepTime() != null
+        || todaySkin.getWaterIntake() != null
+        || todaySkin.getExerciseTime() != null
+        || todaySkin.getDietType() != null;
   }
 
   // baseline 대비 오늘 값이 이 이상 나빠지거나 좋아지면 "뚜렷한 변화"로 판단 (AnalysisService.calcChange와 동일 기준)

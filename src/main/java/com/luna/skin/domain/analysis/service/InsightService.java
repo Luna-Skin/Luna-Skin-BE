@@ -52,7 +52,7 @@ public class InsightService {
    * 주기별 트러블 패턴과 집중 구간(peak)을 반환한다.
    *
    * - 매일 기록을 전제로 하지 않으므로, 특정 day의 값은 그 날짜 하나가 아니라 앞뒤
-   *   {@link #TIMELINE_WINDOW}일(기본 ±3일)을 같이 묶어 이동평균으로 완만하게 계산한다.
+   *   {@link #TIMELINE_WINDOW}일(기본 ±2일)을 같이 묶어 이동평균으로 완만하게 계산한다.
    * - 미관측 날짜는 null 처리 (0점 포함 시 평균 왜곡 방지)
    * - 전체 평균 초과 구간 중 가장 긴 연속 구간을 peak로 판정
    * - 결과는 캐싱되며 새 분석 저장 시 evict
@@ -309,7 +309,7 @@ public class InsightService {
   }
 
   // 트러블 타임라인 이동평균 반경 (매일 기록을 안 하는 유저가 많아 특정 하루 값만 보면 들쭉날쭉해짐)
-  private static final int TIMELINE_WINDOW = 3;
+  private static final int TIMELINE_WINDOW = 2;
 
   private List<TroubleTimelineResponse.TroublePoint> buildTimeline(Map<Integer, List<Integer>> troubleByDay) {
     List<TroubleTimelineResponse.TroublePoint> timeline = new ArrayList<>();

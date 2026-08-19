@@ -51,6 +51,8 @@ public class InsightService {
    * 생리 시작일 기준 D-14 ~ D+14 구간의 트러블 점수를 누적 평균으로 계산하여
    * 주기별 트러블 패턴과 집중 구간(peak)을 반환한다.
    *
+   * - AI가 주는 trouble 원점수는 "높을수록 건강함"(0개=100점)이라, 트러블이 심한 정도를 보여주는
+   *   troubleIndex는 (100 - trouble)로 뒤집어서 계산한다 (값이 높을수록 트러블이 심함).
    * - 매일 기록을 전제로 하지 않으므로, 특정 day의 값은 그 날짜 하나가 아니라 앞뒤
    *   {@link #TIMELINE_WINDOW}일(기본 ±2일)을 같이 묶어 이동평균으로 완만하게 계산한다.
    * - 미관측 날짜는 null 처리 (0점 포함 시 평균 왜곡 방지)
@@ -84,7 +86,8 @@ public class InsightService {
       for (int d = -14; d <= 14; d++) {
         DetailedSkinAnalysis detail = detailByDate.get(startDate.plusDays(d));
         if (detail != null && detail.getTrouble() != null) {
-          troubleByDay.get(d).add(detail.getTrouble());
+          // AI가 주는 trouble 원점수는 "높을수록 건강함"이라, 트러블이 심한 정도로 보여주려면 뒤집어야 함
+          troubleByDay.get(d).add(100 - detail.getTrouble());
         }
       }
     }
@@ -225,10 +228,11 @@ public class InsightService {
             a -> hasBadFood(a.getTodaySkin().getDietType()),
             a -> hasGoodFood(a.getTodaySkin().getDietType())));
 
+    // trouble/moisture/dullness는 전부 AI 원점수가 "높을수록 좋은 상태"라 lowerIsWorse=true
     List<MetricSpec> metrics = List.of(
-        new MetricSpec(DetailedSkinAnalysis::getTrouble, false, "트러블 ↑", "트러블 ↓"),
-        new MetricSpec(DetailedSkinAnalysis::getMoisture, true, "건조도 ↑", "건조도 ↓"), // 수분은 낮을수록 나쁨(건조)
-        new MetricSpec(DetailedSkinAnalysis::getDullness, false, "칙칙함 ↑", "칙칙함 ↓"));
+        new MetricSpec(DetailedSkinAnalysis::getTrouble, true, "트러블 ↑", "트러블 ↓"),
+        new MetricSpec(DetailedSkinAnalysis::getMoisture, true, "건조도 ↑", "건조도 ↓"),
+        new MetricSpec(DetailedSkinAnalysis::getDullness, true, "칙칙함 ↑", "칙칙함 ↓"));
 
     List<LifestyleInsightResponse.LifestyleFactor> factors = new ArrayList<>();
     for (MetricSpec metric : metrics) {

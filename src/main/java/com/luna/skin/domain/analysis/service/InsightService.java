@@ -163,12 +163,13 @@ public class InsightService {
 
   /**
    * [생활습관 영향 분석 조회]
-   * 수면 6시간 / 수분 1.5L / 운동 30분 / 식단 기준치로 판단한다.
+   * "그 습관이 실제 트러블/피부 상태와 연관 있는지"를 보여주는 지표 — impactType/impactLabel 모두
+   * 기준치 미달(불량군)·충족(양호군)의 실제 피부 측정값(트러블/건조도/칙칙함) 데이터를 근거로 정한다.
    *
-   * - impactType/impactLabel은 항상 같은 방향을 가리킨다.
-   *   양쪽 그룹 다 있으면 실측 평균 차이의 부호로 type을 정하고, 차이가 5 이하면 label만 "-"로 표시.
-   *   한쪽 그룹만 있으면 기준치 방향(불량군 있으면 negative/↑, 양호군만 있으면 positive/↓) 그대로 사용.
-   * - 두 그룹 모두 데이터가 없으면(해당 항목 미기록) 그 요인은 응답에서 제외
+   * - impactType: 불량군(기준치 미달) 기록이 하나라도 있으면 negative, 없으면(양호군만 있으면) positive
+   * - impactLabel: type과 같은 방향(↑=negative, ↓=positive)이 기본이되, 양쪽 그룹 다 있고 실측 평균
+   *   차이가 5 이하로 애매하면 화살표 대신 "-"로 표시 (이때도 type은 negative 유지)
+   * - 두 그룹 모두 데이터가 없으면(해당 항목 미기록이거나 연관 근거 자체가 없음) 그 요인은 응답에서 제외
    * - 식단 null은 양호군/불량군 모두 제외 (통계 왜곡 방지)
    * - 결과는 캐싱되며 새 분석 저장 시 evict
    *
@@ -188,25 +189,25 @@ public class InsightService {
 
     List<LifestyleInsightResponse.LifestyleFactor> factors = new ArrayList<>();
 
-    addFactorIfSignificant(factors, analyses, detailMap,
+    addFactor(factors, analyses, detailMap,
         a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() < 6,
         a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() >= 6,
         DetailedSkinAnalysis::getTrouble,
         "수면 6시간 미만", "트러블 ↑", "트러블 ↓", "트러블 -");
 
-    addFactorIfSignificant(factors, analyses, detailMap,
+    addFactor(factors, analyses, detailMap,
         a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() < 1.5,
         a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() >= 1.5,
         DetailedSkinAnalysis::getMoisture,
         "수분 섭취 부족", "건조도 ↑", "건조도 ↓", "건조도 -");
 
-    addFactorIfSignificant(factors, analyses, detailMap,
+    addFactor(factors, analyses, detailMap,
         a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() < 30,
         a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() >= 30,
         DetailedSkinAnalysis::getDullness,
         "운동 부족", "칙칙함 ↑", "칙칙함 ↓", "칙칙함 -");
 
-    addFactorIfSignificant(factors, analyses, detailMap,
+    addFactor(factors, analyses, detailMap,
         a -> hasBadFood(a.getTodaySkin().getDietType()),
         a -> hasGoodFood(a.getTodaySkin().getDietType()),
         DetailedSkinAnalysis::getTrouble,
@@ -293,7 +294,7 @@ public class InsightService {
   // 실측 평균 차이가 이 이하면 "비슷함"으로 보고 라벨을 "-"로 표시 (AnalysisService.calcChange와 동일 기준)
   private static final int SIMILAR_THRESHOLD = 5;
 
-  private void addFactorIfSignificant(
+  private void addFactor(
       List<LifestyleInsightResponse.LifestyleFactor> factors,
       List<AiAnalysis> analyses,
       Map<Long, DetailedSkinAnalysis> detailMap,
@@ -305,20 +306,18 @@ public class InsightService {
       String positiveLabel,
       String similarLabel) {
 
+    // impactType/impactLabel 둘 다 불량군/양호군의 실제 피부 측정값 평균 비교로 정한다.
     Optional<Double> badAvg = avgMetric(analyses.stream().filter(badCondition).collect(Collectors.toList()), detailMap, metric);
     Optional<Double> goodAvg = avgMetric(analyses.stream().filter(goodCondition).collect(Collectors.toList()), detailMap, metric);
 
-    // 해당 항목을 한 번도 기록 안 했으면(양쪽 다 데이터 없음) 요인 자체를 응답에서 제외
+    // 비교할 근거(피부 분석 기록)가 양쪽 다 없으면 그 습관과 트러블의 연관성 자체를 알 수 없으니 제외
     if (badAvg.isEmpty() && goodAvg.isEmpty()) return;
 
-    // impactType과 impactLabel이 항상 같은 방향을 가리키도록, 양쪽 다 있으면 실측 평균 차이의
-    // 부호로 type을 정하고(작은 차이라도), 한쪽만 있으면 그 기준치 방향을 그대로 따른다.
-    boolean isNegative = (badAvg.isPresent() && goodAvg.isPresent())
-        ? badAvg.get() > goodAvg.get()
-        : badAvg.isPresent();
+    // impactType은 기준치(불량군 존재 여부)로만 정한다: 불량군 기록이 하나라도 있으면 negative,
+    // 없으면(양호군만 있으면) positive. 그룹 평균 비교는 label을 화살표로 할지 "-"로 할지 정하는 데만 쓴다.
+    boolean isNegative = badAvg.isPresent();
     String impactType = isNegative ? "negative" : "positive";
 
-    // impactLabel: 양쪽 다 있으면 차이가 5 이하일 때만 "비슷함(-)"으로, 그 외엔 위 type과 같은 방향의 화살표
     String impactLabel;
     if (badAvg.isPresent() && goodAvg.isPresent() && Math.abs(badAvg.get() - goodAvg.get()) <= SIMILAR_THRESHOLD) {
       impactLabel = similarLabel;

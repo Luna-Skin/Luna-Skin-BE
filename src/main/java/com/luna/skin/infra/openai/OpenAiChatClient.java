@@ -40,6 +40,12 @@ public class OpenAiChatClient {
             - 분석 기록이 없는 일반적인 질문에는 통상적인 스킨케어 지식으로 답변하세요.
             - 답변은 2~4문장 내외로 간결하게 작성하세요.
             - 의학적 진단이나 처방을 내리지 마세요. 트러블이 심하거나 증상이 오래 지속되면 피부과 방문을 권유하세요.
+            - 당신은 피부·스킨케어·생리주기 상담만 담당합니다. 코딩, 이미지 속 무관한 내용 설명, 일반 상식 등
+              그 외 주제의 질문에는 실제로 답변하지 말고, "저는 피부 상담을 도와드리는 끼끼예요! 피부에 대해
+              궁금한 점을 말씀해 주시면 도와드릴게요." 같이 정중히 화제를 피부 상담으로 돌리세요.
+              단, 인사말(안녕 등)에는 평소처럼 친근하게 인사하고 자연스럽게 피부 질문을 유도하세요.
+            - 업로드된 이미지가 피부/얼굴 사진이 아니라면 그 내용을 분석하거나 설명하지 말고, 피부 사진을
+              보내달라고 요청하거나 피부 관련 질문으로 유도하세요.
             """;
     public static final int MAX_HISTORY_SIZE = 20;
 
@@ -116,6 +122,7 @@ public class OpenAiChatClient {
     private String toDataUri(String imageUrl) {
         String s3BaseUrl = "https://" + bucket + ".s3.ap-northeast-2.amazonaws.com/";
         if (!imageUrl.startsWith(s3BaseUrl)) {
+            log.warn("[OpenAiChatClient] 예상한 S3 URL 형식이 아니라 base64 변환 없이 원본 URL을 그대로 전달합니다: {} (bucket={})", imageUrl, bucket);
             return imageUrl;
         }
 
@@ -135,6 +142,8 @@ public class OpenAiChatClient {
             log.error("[OpenAiChatClient] 지원하지 않는 이미지 형식: {}", imageUrl);
             throw new CustomException(ChatErrorCode.CHAT_UNSUPPORTED_IMAGE_FORMAT);
         }
+
+        log.info("[OpenAiChatClient] 채팅 이미지 base64 변환 완료: bytes={}, mimeType={}", bytes.length, mimeType);
 
         return "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(bytes);
     }

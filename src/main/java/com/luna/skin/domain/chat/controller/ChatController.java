@@ -124,8 +124,9 @@ public class ChatController {
             @Parameter(description = "파일과 함께 보낼 메시지 내용(선택)", example = "갑자기 여드름이 심해 났는데 뭘까요")
             @RequestParam(required = false) String content
     ) {
-        ChatMessageResponse response = chatService
-                .uploadFile(currentUserProvider.getCurrentUserId(), roomId, file, content);
+        Long userId = currentUserProvider.getCurrentUserId();
+        ChatMessageResponse response = chatService.uploadFile(userId, roomId, file, content);
+        chatService.generateAiReply(userId, roomId);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(BaseResponse.success(response));
     }

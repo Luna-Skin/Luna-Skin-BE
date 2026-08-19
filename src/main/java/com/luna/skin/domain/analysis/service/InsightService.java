@@ -53,9 +53,9 @@ public class InsightService {
    *
    * - AI가 주는 trouble 원점수는 "높을수록 건강함"(0개=100점)이라, 트러블이 심한 정도를 보여주는
    *   troubleIndex는 (100 - trouble)로 뒤집어서 계산한다 (값이 높을수록 트러블이 심함).
-   * - 매일 기록을 전제로 하지 않으므로, 특정 day의 값은 그 날짜 하나가 아니라 앞뒤
-   *   {@link #TIMELINE_WINDOW}일(기본 ±2일)을 같이 묶어 이동평균으로 완만하게 계산한다.
-   * - 미관측 날짜는 null 처리 (0점 포함 시 평균 왜곡 방지)
+   * - 매일 기록을 전제로 하지 않으므로, 기록 없는 날은 앞뒤 가장 가까운 실측값 사이를
+   *   선형보간해서 채운다 (고정 윈도우 평균이 아니라 실제 데이터 점을 매끄럽게 잇는 방식).
+   * - 실측값이 있는 양쪽 끝 바깥(보간 불가 구간)은 null 처리 (0점 포함 시 평균 왜곡 방지)
    * - 전체 평균 초과 구간 중 가장 긴 연속 구간을 peak로 판정
    * - 결과는 캐싱되며 새 분석 저장 시 evict
    *
@@ -315,20 +315,63 @@ public class InsightService {
   }
 
   // 트러블 타임라인 이동평균 반경 (매일 기록을 안 하는 유저가 많아 특정 하루 값만 보면 들쭉날쭉해짐)
-  private static final int TIMELINE_WINDOW = 3;
-
+  /**
+   * 정확히 그 날짜에 기록이 있는 날만 실측 평균을 쓰고, 기록이 없는 날은 앞뒤로 가장 가까운
+   * 실측값 사이를 선형보간(linear interpolation)해서 채운다. 고정 윈도우로 뭉뚱그려 평균내는
+   * 대신 실제 데이터 점들을 매끄럽게 이어주는 방식이라, 데이터가 드문드문 있어도 급격히
+   * 꺾이지 않는 곡선이 나온다.
+   */
   private List<TroubleTimelineResponse.TroublePoint> buildTimeline(Map<Integer, List<Integer>> troubleByDay) {
-    List<TroubleTimelineResponse.TroublePoint> timeline = new ArrayList<>();
+    Double[] daily = new Double[29]; // index 0 => D-14 ... index 28 => D+14
     for (int d = -14; d <= 14; d++) {
-      List<Integer> windowScores = new ArrayList<>();
-      for (int w = d - TIMELINE_WINDOW; w <= d + TIMELINE_WINDOW; w++) {
-        List<Integer> scores = troubleByDay.get(w);
-        if (scores != null) windowScores.addAll(scores);
-      }
-      Double avg = windowScores.isEmpty() ? null : windowScores.stream().mapToInt(Integer::intValue).average().orElse(0);
-      timeline.add(TroubleTimelineResponse.TroublePoint.builder().dayFromStart(d).troubleIndex(avg).build());
+      List<Integer> scores = troubleByDay.get(d);
+      daily[d + 14] = scores.isEmpty() ? null : scores.stream().mapToInt(Integer::intValue).average().orElse(0);
+    }
+
+    Double[] interpolated = interpolateGaps(daily);
+
+    List<TroubleTimelineResponse.TroublePoint> timeline = new ArrayList<>();
+    for (int i = 0; i < interpolated.length; i++) {
+      timeline.add(TroubleTimelineResponse.TroublePoint.builder()
+          .dayFromStart(i - 14)
+          .troubleIndex(interpolated[i])
+          .build());
     }
     return timeline;
+  }
+
+  /**
+   * null 구간을 양옆 가장 가까운 실측값 사이의 선형보간으로 채운다.
+   * 한쪽에만 실측값이 있으면 그 값으로 평평하게 채우고, 양쪽 다 없으면 null 그대로 둔다.
+   */
+  private Double[] interpolateGaps(Double[] values) {
+    Double[] result = values.clone();
+    int n = result.length;
+    int i = 0;
+    while (i < n) {
+      if (result[i] != null) {
+        i++;
+        continue;
+      }
+      int start = i - 1; // 갭 이전 실측 인덱스 (-1이면 없음)
+      int end = i;
+      while (end < n && result[end] == null) end++; // 갭 이후 실측 인덱스 (n이면 없음)
+
+      if (start >= 0 && end < n) {
+        double startVal = result[start], endVal = result[end];
+        int gapLen = end - start;
+        for (int k = i; k < end; k++) {
+          double t = (double) (k - start) / gapLen;
+          result[k] = startVal + (endVal - startVal) * t;
+        }
+      } else if (start >= 0) {
+        for (int k = i; k < end; k++) result[k] = result[start];
+      } else if (end < n) {
+        for (int k = i; k < end; k++) result[k] = result[end];
+      }
+      i = end;
+    }
+    return result;
   }
 
   private double calcOverallAvg(List<TroubleTimelineResponse.TroublePoint> timeline) {

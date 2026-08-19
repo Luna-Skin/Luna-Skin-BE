@@ -315,7 +315,7 @@ public class InsightService {
   }
 
   // 트러블 타임라인 이동평균 반경 (매일 기록을 안 하는 유저가 많아 특정 하루 값만 보면 들쭉날쭉해짐)
-  private static final int TIMELINE_WINDOW = 2;
+  private static final int TIMELINE_WINDOW = 3;
 
   private List<TroubleTimelineResponse.TroublePoint> buildTimeline(Map<Integer, List<Integer>> troubleByDay) {
     List<TroubleTimelineResponse.TroublePoint> timeline = new ArrayList<>();

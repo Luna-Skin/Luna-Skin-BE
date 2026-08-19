@@ -27,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -177,6 +178,7 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @Async
     public void generateAiReply(Long userId, Long chatRoomId) {
 
         log.info("[ChatService] AI 응답 생성 - 시작: chatRoomId={}", chatRoomId);
@@ -251,7 +253,15 @@ public class ChatServiceImpl implements ChatService {
 
         String fileUrl = imageStorageService.store(file, "chat");
         MessageType messageType = isImage(file) ? MessageType.IMAGE : MessageType.FILE;
-        String messageContent = (content != null && !content.isBlank()) ? content : file.getOriginalFilename();
+
+        // 이미지는 캡션이 없으면 content를 비워둔다(파일명을 캡션처럼 보여주지 않기 위함).
+        // 이미지가 아닌 첨부파일은 식별할 수 있게 파일명으로 대체한다.
+        String messageContent;
+        if (content != null && !content.isBlank()) {
+            messageContent = content;
+        } else {
+            messageContent = (messageType == MessageType.IMAGE) ? null : file.getOriginalFilename();
+        }
 
         AiChatMessage fileMessage = AiChatMessage.builder()
                 .chatRoom(aiChatRoom)
@@ -264,8 +274,6 @@ public class ChatServiceImpl implements ChatService {
 
         ChatMessageResponse response = ChatMessageResponse.from(fileMessage);
         broadcastAfterCommit(chatRoomId, response);
-
-        generateAndBroadcastAiReply(aiChatRoom);
 
         log.info("[ChatService] 파일 업로드 - 완료: chatRoomId={}", chatRoomId);
 

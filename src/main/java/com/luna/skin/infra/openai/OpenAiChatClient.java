@@ -119,23 +119,43 @@ public class OpenAiChatClient {
             return imageUrl;
         }
 
+        byte[] bytes;
         try {
             String key = imageUrl.substring(s3BaseUrl.length());
-            byte[] bytes = s3Client.getObjectAsBytes(
+            bytes = s3Client.getObjectAsBytes(
                     GetObjectRequest.builder().bucket(bucket).key(key).build()
             ).asByteArray();
-            return "data:" + resolveMimeType(imageUrl) + ";base64," + Base64.getEncoder().encodeToString(bytes);
         } catch (Exception e) {
             log.error("[OpenAiChatClient] 채팅 이미지 다운로드 실패: {}", imageUrl, e);
             throw new CustomException(ChatErrorCode.AI_RESPONSE_FAILED);
         }
+
+        String mimeType = detectMimeType(bytes);
+        if (mimeType == null) {
+            log.error("[OpenAiChatClient] 지원하지 않는 이미지 형식: {}", imageUrl);
+            throw new CustomException(ChatErrorCode.CHAT_UNSUPPORTED_IMAGE_FORMAT);
+        }
+
+        return "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(bytes);
     }
 
-    private String resolveMimeType(String imageUrl) {
-        String lower = imageUrl.toLowerCase();
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-        if (lower.endsWith(".png")) return "image/png";
-        if (lower.endsWith(".webp")) return "image/webp";
-        return "image/png";
+    // 파일 확장자 대신 실제 바이트 시그니처로 판별한다. 확장자가 없거나(모바일 업로드 등) 실제 포맷과 달라도
+    // 정확히 판별하기 위함이며, OpenAI가 지원하는 png/jpeg/gif/webp가 아니면 null을 반환한다.
+    private String detectMimeType(byte[] bytes) {
+        if (bytes.length >= 8 && (bytes[0] & 0xFF) == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) {
+            return "image/png";
+        }
+        if (bytes.length >= 3 && (bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xD8 && (bytes[2] & 0xFF) == 0xFF) {
+            return "image/jpeg";
+        }
+        if (bytes.length >= 3 && bytes[0] == 'G' && bytes[1] == 'I' && bytes[2] == 'F') {
+            return "image/gif";
+        }
+        if (bytes.length >= 12
+                && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F'
+                && bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P') {
+            return "image/webp";
+        }
+        return null;
     }
 }

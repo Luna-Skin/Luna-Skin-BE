@@ -24,6 +24,7 @@ import com.luna.skin.global.storage.ImageStorageService;
 import com.luna.skin.infra.openai.OpenAiChatClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -36,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -95,6 +97,13 @@ public class ChatServiceImpl implements ChatService {
                         log.error("[ChatService] 채팅방 생성 - 에러: 존재하지 않는 분석입니다. id={}", aiAnalysisId);
                         return new CustomException(ChatErrorCode.CHAT_ANALYSIS_NOT_FOUND);
                     });
+
+            // 분석과 연결된 방은 버튼을 여러 번 눌러도 매번 새로 만들지 않고, 이미 있으면 그 방을 재사용한다.
+            Optional<AiChatRoom> existingRoom = aiChatRoomRepository.findByUser_UserIdAndAiAnalysis_AnalysisId(userId, aiAnalysisId);
+            if (existingRoom.isPresent()) {
+                log.info("[ChatService] 채팅방 생성 - 완료(기존 분석 연결 방 재사용): chatRoomId={}", existingRoom.get().getChatRoomId());
+                return CreateChatRoomResponse.from(existingRoom.get());
+            }
         }
 
         AiChatRoom aiChatRoom = AiChatRoom.builder()
@@ -103,7 +112,17 @@ public class ChatServiceImpl implements ChatService {
                 .aiAnalysis(aiAnalysis)
                 .build();
 
-        AiChatRoom savedChatRoom = aiChatRoomRepository.save(aiChatRoom);
+        AiChatRoom savedChatRoom;
+        try {
+            savedChatRoom = aiChatRoomRepository.save(aiChatRoom);
+        } catch (DataIntegrityViolationException e) {
+            if (aiAnalysis == null) {
+                throw e;
+            }
+            // 동시에 두 번 눌러 같은 분석에 대한 방이 이미 생성된 경우(uq_acr_user_analysis 위반)
+            log.error("[ChatService] 채팅방 생성 - 에러: 동시 생성 충돌. userId={}, analysisId={}", userId, aiAnalysisId);
+            throw new CustomException(ChatErrorCode.CHAT_ROOM_CREATE_CONFLICT);
+        }
         saveWelcomeMessage(savedChatRoom, GENERAL_WELCOME_MESSAGE);
 
         CreateChatRoomResponse response = CreateChatRoomResponse.from(savedChatRoom);
@@ -370,7 +389,15 @@ public class ChatServiceImpl implements ChatService {
                             .title(title)
                             .aiAnalysis(aiAnalysis)
                             .build();
-                    AiChatRoom savedNewRoom = aiChatRoomRepository.save(newRoom);
+
+                    AiChatRoom savedNewRoom;
+                    try {
+                        savedNewRoom = aiChatRoomRepository.save(newRoom);
+                    } catch (DataIntegrityViolationException e) {
+                        // 동시에 두 번 눌러 같은 분석에 대한 방이 이미 생성된 경우(uq_acr_user_analysis 위반)
+                        log.error("[ChatService] 분석 기반 채팅방 조회/생성 - 에러: 동시 생성 충돌. userId={}, analysisId={}", userId, analysisId);
+                        throw new CustomException(ChatErrorCode.CHAT_ROOM_CREATE_CONFLICT);
+                    }
 
                     String analysisWelcomeMessage = "오늘의 분석 결과에서 어떤 부분이 궁금하신가요?\n→ " + logDate + " 투데이스킨 첨부됨";
                     saveWelcomeMessage(savedNewRoom, analysisWelcomeMessage);

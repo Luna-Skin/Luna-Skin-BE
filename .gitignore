@@ -41,3 +41,6 @@ out/
 
 ### Uploaded files ###
 uploads/
+
+### Local docker overrides (개인 로컬 포트 등, 팀 공용 아님) ###
+docker-compose.override.yml

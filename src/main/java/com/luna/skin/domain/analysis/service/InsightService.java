@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalDouble;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -163,14 +162,14 @@ public class InsightService {
 
   /**
    * [생활습관 영향 분석 조회]
-   * "그 습관이 실제 트러블/피부 상태와 연관 있는지"를 보여주는 지표 — impactType/impactLabel 모두
-   * 기준치 미달(불량군)·충족(양호군)의 실제 피부 측정값(트러블/건조도/칙칙함) 데이터를 근거로 정한다.
+   * 유저의 가장 최근 분석 기록("오늘")을 그 이전 전체 기록의 평균("baseline")과 비교해서,
+   * baseline보다 뚜렷하게(5 이상) 나빠지거나 좋아진 피부 지표를 찾는다. 트러블/건조도/칙칙함은
+   * 각각 최대 1개 factor로만 나가며, 그 지표에 매칭되는 습관은 오늘 그 지표 방향에 해당하는
+   * 습관들(나빠졌으면 오늘 기준치 미달 습관, 좋아졌으면 기준치 충족 습관) 중 이 유저의 과거
+   * 기록에서 그 지표와 가장 상관관계가 컸던(양호군·불량군 평균 차이가 가장 큰) 습관 하나로 고른다.
    *
-   * - impactType: 불량군(기준치 미달) 기록이 하나라도 있으면 negative, 없으면(양호군만 있으면) positive
-   * - impactLabel: type과 같은 방향(↑=negative, ↓=positive)이 기본이되, 양쪽 그룹 다 있고 실측 평균
-   *   차이가 5 이하로 애매하면 화살표 대신 "-"로 표시 (이때도 type은 negative 유지)
-   * - 두 그룹 모두 데이터가 없으면(해당 항목 미기록이거나 연관 근거 자체가 없음) 그 요인은 응답에서 제외
-   * - 식단 null은 양호군/불량군 모두 제외 (통계 왜곡 방지)
+   * - 비교할 과거 기록(baseline)이 없으면(분석이 1건 이하) 빈 배열
+   * - 지표가 뚜렷하게 변하지 않았거나, 매칭할 습관 근거가 없으면 그 지표는 factor로 안 나감
    * - 결과는 캐싱되며 새 분석 저장 시 evict
    *
    * @param userId 조회할 사용자 식별자
@@ -179,41 +178,113 @@ public class InsightService {
   @Cacheable(value = "lifestyleInsight", key = "#userId")
   public LifestyleInsightResponse getLifestyleInsight(Long userId) {
     List<AiAnalysis> analyses = aiAnalysisRepository.findAllByUserIdWithTodaySkin(userId);
-    if (analyses.isEmpty()) {
+    if (analyses.size() < 2) {
       return LifestyleInsightResponse.builder().factors(List.of()).build();
     }
+
+    AiAnalysis latest = analyses.stream()
+        .max(Comparator.comparing(a -> a.getTodaySkin().getLogDate()))
+        .orElseThrow();
 
     Map<Long, DetailedSkinAnalysis> detailMap = detailedSkinAnalysisRepository
         .findAllByAiAnalysisIn(analyses).stream()
         .collect(Collectors.toMap(d -> d.getAiAnalysis().getAnalysisId(), d -> d));
 
+    DetailedSkinAnalysis latestDetail = detailMap.get(latest.getAnalysisId());
+    if (latestDetail == null) {
+      return LifestyleInsightResponse.builder().factors(List.of()).build();
+    }
+
+    List<AiAnalysis> pastAnalyses = analyses.stream()
+        .filter(a -> !a.getAnalysisId().equals(latest.getAnalysisId()))
+        .collect(Collectors.toList());
+
+    List<Habit> habits = List.of(
+        new Habit("수면 6시간 미만", "수면 6시간 이상",
+            a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() < 6,
+            a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() >= 6),
+        new Habit("수분 섭취 부족", "수분 충분 섭취",
+            a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() < 1.5,
+            a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() >= 1.5),
+        new Habit("운동 부족", "운동 충분",
+            a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() < 30,
+            a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() >= 30),
+        new Habit("자극적 식단", "자극적이지 않은 식단",
+            a -> hasBadFood(a.getTodaySkin().getDietType()),
+            a -> hasGoodFood(a.getTodaySkin().getDietType())));
+
+    List<MetricSpec> metrics = List.of(
+        new MetricSpec(DetailedSkinAnalysis::getTrouble, false, "트러블 ↑", "트러블 ↓"),
+        new MetricSpec(DetailedSkinAnalysis::getMoisture, true, "건조도 ↑", "건조도 ↓"), // 수분은 낮을수록 나쁨(건조)
+        new MetricSpec(DetailedSkinAnalysis::getDullness, false, "칙칙함 ↑", "칙칙함 ↓"));
+
     List<LifestyleInsightResponse.LifestyleFactor> factors = new ArrayList<>();
+    for (MetricSpec metric : metrics) {
+      Integer todayValue = metric.extractor().apply(latestDetail);
+      if (todayValue == null) continue;
+      Optional<Double> baseline = avgMetric(pastAnalyses, detailMap, metric.extractor());
+      if (baseline.isEmpty()) continue;
 
-    addFactor(factors, analyses, detailMap,
-        a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() < 6,
-        a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() >= 6,
-        DetailedSkinAnalysis::getTrouble,
-        "수면 6시간 미만", "트러블 ↑", "트러블 ↓", "트러블 -");
-
-    addFactor(factors, analyses, detailMap,
-        a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() < 1.5,
-        a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() >= 1.5,
-        DetailedSkinAnalysis::getMoisture,
-        "수분 섭취 부족", "건조도 ↑", "건조도 ↓", "건조도 -");
-
-    addFactor(factors, analyses, detailMap,
-        a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() < 30,
-        a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() >= 30,
-        DetailedSkinAnalysis::getDullness,
-        "운동 부족", "칙칙함 ↑", "칙칙함 ↓", "칙칙함 -");
-
-    addFactor(factors, analyses, detailMap,
-        a -> hasBadFood(a.getTodaySkin().getDietType()),
-        a -> hasGoodFood(a.getTodaySkin().getDietType()),
-        DetailedSkinAnalysis::getTrouble,
-        "자극적 식단", "트러블 ↑", "트러블 ↓", "트러블 -");
+      double diff = metric.lowerIsWorse() ? baseline.get() - todayValue : todayValue - baseline.get(); // 양수 = 나빠짐
+      if (diff > SIMILAR_THRESHOLD) {
+        matchHabit(habits, h -> h.isBad().test(latest), pastAnalyses, detailMap, metric)
+            .ifPresent(h -> factors.add(factor(h.badCondition(), "negative", metric.worsenedLabel())));
+      } else if (diff < -SIMILAR_THRESHOLD) {
+        matchHabit(habits, h -> h.isGood().test(latest), pastAnalyses, detailMap, metric)
+            .ifPresent(h -> factors.add(factor(h.goodCondition(), "positive", metric.improvedLabel())));
+      }
+    }
 
     return LifestyleInsightResponse.builder().factors(factors).build();
+  }
+
+  private record Habit(String badCondition, String goodCondition,
+      Predicate<AiAnalysis> isBad, Predicate<AiAnalysis> isGood) {}
+
+  private record MetricSpec(Function<DetailedSkinAnalysis, Integer> extractor, boolean lowerIsWorse,
+      String worsenedLabel, String improvedLabel) {}
+
+  /**
+   * 오늘 그 방향(나쁨/좋음)에 해당하는 습관들 중, 과거 기록에서 이 지표와 가장 상관관계가 컸던
+   * (양호군·불량군 평균 차이가 가장 큰) 습관 하나를 고른다. 오늘 해당하는 습관이 없거나, 과거
+   * 데이터가 부족해 상관관계를 계산할 수 없으면 빈 값을 반환한다.
+   */
+  private Optional<Habit> matchHabit(List<Habit> habits, Predicate<Habit> todayCondition,
+      List<AiAnalysis> pastAnalyses, Map<Long, DetailedSkinAnalysis> detailMap, MetricSpec metric) {
+    Habit best = null;
+    double bestScore = Double.NEGATIVE_INFINITY;
+    for (Habit habit : habits) {
+      if (!todayCondition.test(habit)) continue;
+      Optional<Double> badAvg = avgMetric(pastAnalyses.stream().filter(habit.isBad()).collect(Collectors.toList()), detailMap, metric.extractor());
+      Optional<Double> goodAvg = avgMetric(pastAnalyses.stream().filter(habit.isGood()).collect(Collectors.toList()), detailMap, metric.extractor());
+      if (badAvg.isEmpty() || goodAvg.isEmpty()) continue;
+      double score = metric.lowerIsWorse() ? goodAvg.get() - badAvg.get() : badAvg.get() - goodAvg.get();
+      if (score > bestScore) {
+        bestScore = score;
+        best = habit;
+      }
+    }
+    return Optional.ofNullable(best);
+  }
+
+  private Optional<Double> avgMetric(List<AiAnalysis> list, Map<Long, DetailedSkinAnalysis> detailMap,
+      Function<DetailedSkinAnalysis, Integer> getter) {
+    return list.stream()
+        .map(a -> detailMap.get(a.getAnalysisId()))
+        .filter(Objects::nonNull)
+        .map(getter)
+        .filter(Objects::nonNull)
+        .mapToInt(Integer::intValue)
+        .average()
+        .stream().boxed().findFirst();
+  }
+
+  private LifestyleInsightResponse.LifestyleFactor factor(String condition, String impactType, String impactLabel) {
+    return LifestyleInsightResponse.LifestyleFactor.builder()
+        .condition(condition)
+        .impactType(impactType)
+        .impactLabel(impactLabel)
+        .build();
   }
 
   // ======================== Calculations ========================
@@ -291,58 +362,8 @@ public class InsightService {
     return Arrays.stream(diet.split(",")).noneMatch(BAD_FOODS::contains);
   }
 
-  // 실측 평균 차이가 이 이하면 "비슷함"으로 보고 라벨을 "-"로 표시 (AnalysisService.calcChange와 동일 기준)
+  // baseline 대비 오늘 값이 이 이상 나빠지거나 좋아지면 "뚜렷한 변화"로 판단 (AnalysisService.calcChange와 동일 기준)
   private static final int SIMILAR_THRESHOLD = 5;
-
-  private void addFactor(
-      List<LifestyleInsightResponse.LifestyleFactor> factors,
-      List<AiAnalysis> analyses,
-      Map<Long, DetailedSkinAnalysis> detailMap,
-      Predicate<AiAnalysis> badCondition,
-      Predicate<AiAnalysis> goodCondition,
-      Function<DetailedSkinAnalysis, Integer> metric,
-      String condition,
-      String negativeLabel,
-      String positiveLabel,
-      String similarLabel) {
-
-    // impactType/impactLabel 둘 다 불량군/양호군의 실제 피부 측정값 평균 비교로 정한다.
-    Optional<Double> badAvg = avgMetric(analyses.stream().filter(badCondition).collect(Collectors.toList()), detailMap, metric);
-    Optional<Double> goodAvg = avgMetric(analyses.stream().filter(goodCondition).collect(Collectors.toList()), detailMap, metric);
-
-    // 비교할 근거(피부 분석 기록)가 양쪽 다 없으면 그 습관과 트러블의 연관성 자체를 알 수 없으니 제외
-    if (badAvg.isEmpty() && goodAvg.isEmpty()) return;
-
-    // impactType은 기준치(불량군 존재 여부)로만 정한다: 불량군 기록이 하나라도 있으면 negative,
-    // 없으면(양호군만 있으면) positive. 그룹 평균 비교는 label을 화살표로 할지 "-"로 할지 정하는 데만 쓴다.
-    boolean isNegative = badAvg.isPresent();
-    String impactType = isNegative ? "negative" : "positive";
-
-    String impactLabel;
-    if (badAvg.isPresent() && goodAvg.isPresent() && Math.abs(badAvg.get() - goodAvg.get()) <= SIMILAR_THRESHOLD) {
-      impactLabel = similarLabel;
-    } else {
-      impactLabel = isNegative ? negativeLabel : positiveLabel;
-    }
-
-    factors.add(LifestyleInsightResponse.LifestyleFactor.builder()
-        .condition(condition)
-        .impactType(impactType)
-        .impactLabel(impactLabel)
-        .build());
-  }
-
-  private Optional<Double> avgMetric(List<AiAnalysis> list, Map<Long, DetailedSkinAnalysis> detailMap,
-      Function<DetailedSkinAnalysis, Integer> getter) {
-    OptionalDouble result = list.stream()
-        .map(a -> detailMap.get(a.getAnalysisId()))
-        .filter(Objects::nonNull)
-        .map(getter)
-        .filter(Objects::nonNull)
-        .mapToInt(Integer::intValue)
-        .average();
-    return result.isPresent() ? Optional.of(result.getAsDouble()) : Optional.empty();
-  }
 
   private Double avgMetricValue(List<DetailedSkinAnalysis> details, Function<DetailedSkinAnalysis, Double> extractor) {
     return details.stream()

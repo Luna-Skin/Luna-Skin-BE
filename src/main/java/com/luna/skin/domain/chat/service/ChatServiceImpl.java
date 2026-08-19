@@ -46,13 +46,10 @@ public class ChatServiceImpl implements ChatService {
     private static final String CHAT_ROOM_TOPIC_PREFIX = "/topic/chat/";
     private static final DateTimeFormatter TITLE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy년 M월 d일");
     private static final String GENERAL_WELCOME_MESSAGE = "안녕하세요! 끼끼의 피부상담소입니다.\n무엇이 궁금하신가요?";
-    private static final List<String> ANALYSIS_INTENT_KEYWORDS = List.of(
-            "피부 분석", "분석 결과", "내 분석", "제 분석",
-            "분석해줘", "분석 알려줘", "분석 보여줘", "내 피부 상태"
-    );
     private static final String NO_ANALYSIS_FOUND_CONTEXT =
-            "사용자가 자신의 피부 분석 결과를 물어봤지만 아직 등록된 피부 분석 기록이 없습니다. " +
-                    "투데이 스킨 분석을 먼저 진행해달라고 안내하세요.";
+            "사용자는 아직 등록된 피부 분석 기록이 없습니다. 사용자가 자신의 피부 분석/기록을 물어볼 때만 " +
+                    "투데이 스킨 분석을 먼저 진행해달라고 안내하고, 그 외의 일반적인 질문이나 인사에는 이 사실을 " +
+                    "언급하지 말고 자연스럽게 답변하세요.";
 
     private final AiChatRoomRepository aiChatRoomRepository;
     private final AiChatMessageRepository aiChatMessageRepository;
@@ -209,7 +206,7 @@ public class ChatServiceImpl implements ChatService {
                 .getContent()
                 .reversed();
 
-        String analysisContext = buildAnalysisContext(aiChatRoom, history);
+        String analysisContext = buildAnalysisContext(aiChatRoom);
 
         String aiReply;
         try {
@@ -386,16 +383,12 @@ public class ChatServiceImpl implements ChatService {
         return CreateChatRoomResponse.from(aiChatRoom);
     }
 
-    // 채팅방이 분석 기록과 연결되어 있으면 그날의 지표를, 아니면 사용자가 "내 피부 분석"처럼 물어볼 때
-    // 가장 최근 분석 기록을 조회해 AI 시스템 프롬프트에 덧붙일 컨텍스트로 만든다.
-    private String buildAnalysisContext(AiChatRoom aiChatRoom, List<AiChatMessage> history) {
+    // 채팅방이 분석 기록과 연결되어 있으면 그날의 지표를, 아니면 사용자의 가장 최근 분석 기록을 조회해
+    // AI 시스템 프롬프트에 덧붙일 컨텍스트로 만든다. 실제로 언급할지는 프롬프트 지침에 따라 AI가 판단한다.
+    private String buildAnalysisContext(AiChatRoom aiChatRoom) {
         AiAnalysis aiAnalysis = aiChatRoom.getAiAnalysis();
 
         if (aiAnalysis == null) {
-            if (!isLatestMessageAnalysisIntent(history)) {
-                return null;
-            }
-
             Long userId = aiChatRoom.getUser().getUserId();
             aiAnalysis = aiAnalysisRepository
                     .findFirstByTodaySkin_User_UserIdOrderByTodaySkin_LogDateDesc(userId)
@@ -425,20 +418,6 @@ public class ChatServiceImpl implements ChatService {
         context.append(". 이 기록을 참고해서 사용자의 질문에 답변하세요.");
 
         return context.toString();
-    }
-
-    // 방금 사용자가 보낸 메시지가 "내 피부 분석"처럼 자신의 분석 결과를 묻는 의도인지 확인한다.
-    private boolean isLatestMessageAnalysisIntent(List<AiChatMessage> history) {
-        if (history.isEmpty()) {
-            return false;
-        }
-
-        AiChatMessage latestMessage = history.get(history.size() - 1);
-        if (latestMessage.getRole() != MessageRole.USER || latestMessage.getContent() == null) {
-            return false;
-        }
-
-        return ANALYSIS_INTENT_KEYWORDS.stream().anyMatch(latestMessage.getContent()::contains);
     }
 
 }

@@ -2,9 +2,11 @@ package com.luna.skin.domain.chat.service;
 
 import com.luna.skin.domain.chat.dto.request.CreateChatRoomRequest;
 import com.luna.skin.domain.chat.dto.response.ChatMessagePageResponse;
+import com.luna.skin.domain.chat.dto.response.ChatMessageResponse;
 import com.luna.skin.domain.chat.dto.response.ChatRoomListPageResponse;
 import com.luna.skin.domain.chat.dto.response.CreateChatRoomResponse;
 import com.luna.skin.domain.chat.dto.response.RenameChatRoomResponse;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface ChatService {
 
@@ -20,6 +22,8 @@ public interface ChatService {
 
     /**
      * [채팅방 생성 매서드]
+     * aiAnalysis가 주어지면 find-or-create로 동작한다 — 해당 유저가 그 분석에 대해 이미 만든 방이
+     * 있으면 그 방을 그대로 반환하고, 없으면 새로 만든다. aiAnalysis가 없으면(일반 채팅) 항상 새로 만든다.
      *
      * @param userId
      * @param createChatRoomRequest title, analysis_id(선택)
@@ -36,14 +40,35 @@ public interface ChatService {
     void deleteChatRoom(Long userId, Long chatRoomId);
 
     /**
-     * [메시지 전송 매서드]
-     * 유저 메시지를 저장 후 브로드캐스트하고, OpenAI 응답을 받아 저장 후 브로드캐스트한다.
+     * [유저 메시지 저장 매서드]
+     * 유저 메시지를 저장하고 브로드캐스트한다. AI 응답 생성(generateAiReply)과 별도 트랜잭션으로
+     * 분리되어 있어, 유저 메시지가 AI 응답보다 먼저 클라이언트에 도착한다.
      *
      * @param userId 메시지를 보내는 사용자 식별자 (소유자 검증용)
      * @param chatRoomId 메시지를 보낼 채팅방 식별자
      * @param content 메시지 내용
      */
-    void sendMessage(Long userId, Long chatRoomId, String content);
+    void saveUserMessage(Long userId, Long chatRoomId, String content);
+
+    /**
+     * [AI 응답 생성 매서드]
+     * 최근 대화 이력을 바탕으로 OpenAI 응답을 생성해 저장 후 브로드캐스트한다.
+     *
+     * @param userId 요청 사용자 식별자 (소유자 검증용)
+     * @param chatRoomId AI 응답을 생성할 채팅방 식별자
+     */
+    void generateAiReply(Long userId, Long chatRoomId);
+
+    /**
+     * [파일/이미지 업로드 매서드]
+     * 파일을 저장하고 채팅 메시지로 남긴 뒤 브로드캐스트한다.
+     *
+     * @param userId 파일을 업로드하는 사용자 식별자 (소유자 검증용)
+     * @param chatRoomId 파일을 업로드할 채팅방 식별자
+     * @param file 업로드할 파일/이미지
+     * @return 생성된 채팅 메시지 응답 DTO
+     */
+    ChatMessageResponse uploadFile(Long userId, Long chatRoomId, MultipartFile file, String content);
 
     /**
      * [대화 내역 조회 매서드]

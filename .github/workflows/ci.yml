@@ -31,6 +31,7 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: 'gradle'
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -41,4 +42,9 @@ jobs:
           DB_URL: jdbc:postgresql://localhost:5432/lunaskin
           DB_USERNAME: lunaskin
           DB_PASSWORD: lunaskin123
+
+          AWS_ACCESS_KEY: test-access-key
+          AWS_SECRET_KEY: test-secret-key
+          AWS_S3_BUCKET: test-bucket
+
           OPENAI_API_KEY: test-key

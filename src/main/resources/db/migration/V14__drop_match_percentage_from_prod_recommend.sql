@@ -1,0 +1,1 @@
+ALTER TABLE prod_recommend DROP COLUMN match_percentage;

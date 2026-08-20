@@ -20,19 +20,24 @@ import com.luna.skin.domain.chat.repository.AiChatRoomRepository;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.domain.user.repository.UserRepository;
 import com.luna.skin.global.exception.CustomException;
+import com.luna.skin.global.storage.ImageStorageService;
 import com.luna.skin.infra.openai.OpenAiChatClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -42,6 +47,11 @@ public class ChatServiceImpl implements ChatService {
 
     private static final String CHAT_ROOM_TOPIC_PREFIX = "/topic/chat/";
     private static final DateTimeFormatter TITLE_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy년 M월 d일");
+    private static final String GENERAL_WELCOME_MESSAGE = "안녕하세요! 끼끼의 피부상담소입니다.\n무엇이 궁금하신가요?";
+    private static final String NO_ANALYSIS_FOUND_CONTEXT =
+            "사용자는 아직 등록된 피부 분석 기록이 없습니다. 사용자가 자신의 피부 분석/기록을 물어볼 때만 " +
+                    "투데이 스킨 분석을 먼저 진행해달라고 안내하고, 그 외의 일반적인 질문이나 인사에는 이 사실을 " +
+                    "언급하지 말고 자연스럽게 답변하세요.";
 
     private final AiChatRoomRepository aiChatRoomRepository;
     private final AiChatMessageRepository aiChatMessageRepository;
@@ -50,6 +60,7 @@ public class ChatServiceImpl implements ChatService {
     private final DetailedSkinAnalysisRepository detailedSkinAnalysisRepository;
     private final OpenAiChatClient openAiChatClient;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ImageStorageService imageStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -86,6 +97,13 @@ public class ChatServiceImpl implements ChatService {
                         log.error("[ChatService] 채팅방 생성 - 에러: 존재하지 않는 분석입니다. id={}", aiAnalysisId);
                         return new CustomException(ChatErrorCode.CHAT_ANALYSIS_NOT_FOUND);
                     });
+
+            // 분석과 연결된 방은 버튼을 여러 번 눌러도 매번 새로 만들지 않고, 이미 있으면 그 방을 재사용한다.
+            Optional<AiChatRoom> existingRoom = aiChatRoomRepository.findByUser_UserIdAndAiAnalysis_AnalysisId(userId, aiAnalysisId);
+            if (existingRoom.isPresent()) {
+                log.info("[ChatService] 채팅방 생성 - 완료(기존 분석 연결 방 재사용): chatRoomId={}", existingRoom.get().getChatRoomId());
+                return CreateChatRoomResponse.from(existingRoom.get());
+            }
         }
 
         AiChatRoom aiChatRoom = AiChatRoom.builder()
@@ -94,11 +112,35 @@ public class ChatServiceImpl implements ChatService {
                 .aiAnalysis(aiAnalysis)
                 .build();
 
-        CreateChatRoomResponse response = CreateChatRoomResponse.from(aiChatRoomRepository.save(aiChatRoom));
+        AiChatRoom savedChatRoom;
+        try {
+            savedChatRoom = aiChatRoomRepository.save(aiChatRoom);
+        } catch (DataIntegrityViolationException e) {
+            if (aiAnalysis == null) {
+                throw e;
+            }
+            // 동시에 두 번 눌러 같은 분석에 대한 방이 이미 생성된 경우(uq_acr_user_analysis 위반)
+            log.error("[ChatService] 채팅방 생성 - 에러: 동시 생성 충돌. userId={}, analysisId={}", userId, aiAnalysisId);
+            throw new CustomException(ChatErrorCode.CHAT_ROOM_CREATE_CONFLICT);
+        }
+        saveWelcomeMessage(savedChatRoom, GENERAL_WELCOME_MESSAGE);
+
+        CreateChatRoomResponse response = CreateChatRoomResponse.from(savedChatRoom);
 
         log.info("[ChatService] 채팅방 생성 - 완료: 채팅방 제목={}", createChatRoomRequest.getTitle());
 
         return response;
+    }
+
+    // 채팅방 생성 시 안내 메시지를 AI 메시지로 저장한다.
+    private void saveWelcomeMessage(AiChatRoom aiChatRoom, String content) {
+        AiChatMessage welcomeMessage = AiChatMessage.builder()
+                .chatRoom(aiChatRoom)
+                .role(MessageRole.AI)
+                .messageType(MessageType.TEXT)
+                .content(content)
+                .build();
+        aiChatMessageRepository.save(welcomeMessage);
     }
 
     @Override
@@ -124,7 +166,7 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public void sendMessage(Long userId, Long chatRoomId, String content) {
+    public void saveUserMessage(Long userId, Long chatRoomId, String content) {
 
         log.info("[ChatService] 메시지 전송 - 시작: chatRoomId={}", chatRoomId);
 
@@ -148,6 +190,36 @@ public class ChatServiceImpl implements ChatService {
         aiChatMessageRepository.save(userMessage);
         broadcastAfterCommit(chatRoomId, ChatMessageResponse.from(userMessage));
 
+        log.info("[ChatService] 메시지 전송 - 완료: chatRoomId={}", chatRoomId);
+    }
+
+    @Override
+    @Async
+    public void generateAiReply(Long userId, Long chatRoomId) {
+
+        log.info("[ChatService] AI 응답 생성 - 시작: chatRoomId={}", chatRoomId);
+
+        AiChatRoom aiChatRoom = aiChatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> {
+                    log.error("[ChatService] AI 응답 생성 - 에러: 해당 채팅방 식별자를 찾을 수 없습니다. chatRoomId={}", chatRoomId);
+                    return new CustomException(ChatErrorCode.CHAT_ROOM_NOT_FOUND);
+                });
+
+        if (!aiChatRoom.getUser().getUserId().equals(userId)) {
+            log.error("[ChatService] AI 응답 생성 - 에러: 본인 소유의 채팅방이 아닙니다. userId={}, chatRoomId={}", userId, chatRoomId);
+            throw new CustomException(ChatErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        }
+
+        generateAndBroadcastAiReply(aiChatRoom);
+
+        log.info("[ChatService] AI 응답 생성 - 완료: chatRoomId={}", chatRoomId);
+    }
+
+    // 최근 대화 이력을 바탕으로 AI 응답을 생성해 저장하고 브로드캐스트한다.
+    private void generateAndBroadcastAiReply(AiChatRoom aiChatRoom) {
+
+        Long chatRoomId = aiChatRoom.getChatRoomId();
+
         List<AiChatMessage> history = aiChatMessageRepository
                 .findByChatRoom_ChatRoomIdOrderByCreatedAtDesc(chatRoomId, PageRequest.of(0, OpenAiChatClient.MAX_HISTORY_SIZE))
                 .getContent()
@@ -159,7 +231,7 @@ public class ChatServiceImpl implements ChatService {
         try {
             aiReply = openAiChatClient.getReply(history, analysisContext);
         } catch (CustomException e) {
-            log.error("[ChatService] 메시지 전송 - AI 응답 실패: chatRoomId={}, message={}", chatRoomId, e.getMessage());
+            log.error("[ChatService] AI 응답 생성 - 실패: chatRoomId={}, message={}", chatRoomId, e.getMessage());
             broadcastAfterCommit(chatRoomId, ChatErrorResponse.of(e.getMessage()));
             return;
         }
@@ -172,8 +244,61 @@ public class ChatServiceImpl implements ChatService {
                 .build();
         aiChatMessageRepository.save(aiMessage);
         broadcastAfterCommit(chatRoomId, ChatMessageResponse.from(aiMessage));
+    }
 
-        log.info("[ChatService] 메시지 전송 - 완료: chatRoomId={}", chatRoomId);
+    @Override
+    public ChatMessageResponse uploadFile(Long userId, Long chatRoomId, MultipartFile file, String content) {
+
+        log.info("[ChatService] 파일 업로드 - 시작: chatRoomId={}", chatRoomId);
+
+        AiChatRoom aiChatRoom = aiChatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> {
+                    log.error("[ChatService] 파일 업로드 - 에러: 해당 채팅방 식별자를 찾을 수 없습니다. chatRoomId={}", chatRoomId);
+                    return new CustomException(ChatErrorCode.CHAT_ROOM_NOT_FOUND);
+                });
+
+        if (!aiChatRoom.getUser().getUserId().equals(userId)) {
+            log.error("[ChatService] 파일 업로드 - 에러: 본인 소유의 채팅방이 아닙니다. userId={}, chatRoomId={}", userId, chatRoomId);
+            throw new CustomException(ChatErrorCode.CHAT_ROOM_ACCESS_DENIED);
+        }
+
+        if (file == null || file.isEmpty()) {
+            log.error("[ChatService] 파일 업로드 - 에러: 파일이 비어있습니다. chatRoomId={}", chatRoomId);
+            throw new CustomException(ChatErrorCode.CHAT_FILE_EMPTY);
+        }
+
+        String fileUrl = imageStorageService.store(file, "chat");
+        MessageType messageType = isImage(file) ? MessageType.IMAGE : MessageType.FILE;
+
+        // 이미지는 캡션이 없으면 content를 비워둔다(파일명을 캡션처럼 보여주지 않기 위함).
+        // 이미지가 아닌 첨부파일은 식별할 수 있게 파일명으로 대체한다.
+        String messageContent;
+        if (content != null && !content.isBlank()) {
+            messageContent = content;
+        } else {
+            messageContent = (messageType == MessageType.IMAGE) ? null : file.getOriginalFilename();
+        }
+
+        AiChatMessage fileMessage = AiChatMessage.builder()
+                .chatRoom(aiChatRoom)
+                .role(MessageRole.USER)
+                .messageType(messageType)
+                .content(messageContent)
+                .fileUrl(fileUrl)
+                .build();
+        aiChatMessageRepository.save(fileMessage);
+
+        ChatMessageResponse response = ChatMessageResponse.from(fileMessage);
+        broadcastAfterCommit(chatRoomId, response);
+
+        log.info("[ChatService] 파일 업로드 - 완료: chatRoomId={}", chatRoomId);
+
+        return response;
+    }
+
+    private boolean isImage(MultipartFile file) {
+        String contentType = file.getContentType();
+        return contentType != null && contentType.startsWith("image/");
     }
 
     // 트랜잭션 커밋 이후에만 브로드캐스트 (롤백 시 존재하지 않는 메시지가 클라이언트에 노출되는 것 방지)
@@ -257,13 +382,27 @@ public class ChatServiceImpl implements ChatService {
 
         AiChatRoom aiChatRoom = aiChatRoomRepository.findByUser_UserIdAndAiAnalysis_AnalysisId(userId, analysisId)
                 .orElseGet(() -> {
-                    String title = aiAnalysis.getTodaySkin().getLogDate().format(TITLE_DATE_FORMATTER) + " 피부 상담";
+                    String logDate = aiAnalysis.getTodaySkin().getLogDate().format(TITLE_DATE_FORMATTER);
+                    String title = logDate + " 피부 상담";
                     AiChatRoom newRoom = AiChatRoom.builder()
                             .user(user)
                             .title(title)
                             .aiAnalysis(aiAnalysis)
                             .build();
-                    return aiChatRoomRepository.save(newRoom);
+
+                    AiChatRoom savedNewRoom;
+                    try {
+                        savedNewRoom = aiChatRoomRepository.save(newRoom);
+                    } catch (DataIntegrityViolationException e) {
+                        // 동시에 두 번 눌러 같은 분석에 대한 방이 이미 생성된 경우(uq_acr_user_analysis 위반)
+                        log.error("[ChatService] 분석 기반 채팅방 조회/생성 - 에러: 동시 생성 충돌. userId={}, analysisId={}", userId, analysisId);
+                        throw new CustomException(ChatErrorCode.CHAT_ROOM_CREATE_CONFLICT);
+                    }
+
+                    String analysisWelcomeMessage = "오늘의 분석 결과에서 어떤 부분이 궁금하신가요?\n→ " + logDate + " 투데이스킨 첨부됨";
+                    saveWelcomeMessage(savedNewRoom, analysisWelcomeMessage);
+
+                    return savedNewRoom;
                 });
 
         log.info("[ChatService] 분석 기반 채팅방 조회/생성 - 완료: chatRoomId={}", aiChatRoom.getChatRoomId());
@@ -271,11 +410,20 @@ public class ChatServiceImpl implements ChatService {
         return CreateChatRoomResponse.from(aiChatRoom);
     }
 
-    // 채팅방이 분석 기록과 연결되어 있으면 그날의 지표를 AI 시스템 프롬프트에 덧붙일 컨텍스트로 만든다.
+    // 채팅방이 분석 기록과 연결되어 있으면 그날의 지표를, 아니면 사용자의 가장 최근 분석 기록을 조회해
+    // AI 시스템 프롬프트에 덧붙일 컨텍스트로 만든다. 실제로 언급할지는 프롬프트 지침에 따라 AI가 판단한다.
     private String buildAnalysisContext(AiChatRoom aiChatRoom) {
         AiAnalysis aiAnalysis = aiChatRoom.getAiAnalysis();
+
         if (aiAnalysis == null) {
-            return null;
+            Long userId = aiChatRoom.getUser().getUserId();
+            aiAnalysis = aiAnalysisRepository
+                    .findFirstByTodaySkin_User_UserIdOrderByTodaySkin_LogDateDesc(userId)
+                    .orElse(null);
+
+            if (aiAnalysis == null) {
+                return NO_ANALYSIS_FOUND_CONTEXT;
+            }
         }
 
         StringBuilder context = new StringBuilder()

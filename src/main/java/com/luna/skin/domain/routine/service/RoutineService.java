@@ -5,8 +5,11 @@ import com.luna.skin.domain.analysis.entity.DetailedSkinAnalysis;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
 import com.luna.skin.domain.analysis.repository.DetailedSkinAnalysisRepository;
 import com.luna.skin.domain.cycle.entity.CyclePhase;
+import com.luna.skin.domain.cycle.entity.MenstruationCycle;
 import com.luna.skin.domain.cycle.exception.CycleErrorCode;
 import com.luna.skin.domain.cycle.repository.CyclePhaseRepository;
+import com.luna.skin.domain.cycle.repository.MenstruationCycleRepository;
+import com.luna.skin.domain.cycle.service.CyclePhasePredictor;
 import com.luna.skin.domain.routine.dto.response.AiDailyRoutineResponse;
 import com.luna.skin.domain.routine.entity.AiDailyRoutine;
 import com.luna.skin.domain.routine.entity.RoutineContent;
@@ -42,16 +45,19 @@ public class RoutineService {
     private final RoutineContentRepository routineContentRepository;
     private final RoutinePromptGenerator routinePromptGenerator;
     private final OpenAiRoutineClient openAiRoutineClient;
+    private final MenstruationCycleRepository menstruationCycleRepository;
+    private final CyclePhasePredictor cyclePhasePredictor;
 
     @Transactional
     public AiDailyRoutineResponse generateDailyRoutine(Long currentUserId, LocalDate today) {
 
         User user = userRepository.findById(currentUserId)
                 .orElseThrow(() -> {
-                    log.warn("[]");
+                    log.warn("[하루 루틴 생성] 사용자를 찾을 수 없습니다. currentUserId = {}", currentUserId);
                     return new CustomException(UserErrorCode.USER_NOT_FOUND);
                 });
 
+        // 이미 오늘 데일리 루틴이 있다면
         AiDailyRoutineResponse aiDailyRoutineResponse = aiDailyRoutineRepository.findByUserUserIdAndTargetDate(currentUserId, today)
                 .map(AiDailyRoutineResponse::from)
                 .orElse(null);
@@ -61,10 +67,19 @@ public class RoutineService {
 
             // 오늘 주기 단계 조회
             CyclePhase cyclePhase = cyclePhaseRepository.findByCyclePhaseAtNow(currentUserId, today)
-                    .orElseThrow(() -> {
-                        log.warn("[]");
-                        return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
+                    .orElseGet(() -> {
+
+                        // 주기가 없다면 예측값으로
+                        MenstruationCycle lastCycle = menstruationCycleRepository
+                                .findByLatestMenstruationCycle(currentUserId)
+                                .orElseThrow(() -> {
+                                    log.warn("[하루 루틴 추천] 마지막 주기를 찾을 수 없습니다. currentUserId = {}", currentUserId);
+                                    return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
+                                });
+
+                        return cyclePhasePredictor.predict(lastCycle, today);
                     });
+
 
             // 사용자의 최근 3일 중 가장 최근 투데이 스킨, 상세 지표를 조회후
             // 투데이 스킨이 없으면 주기 단계만으로 분석
@@ -101,10 +116,10 @@ public class RoutineService {
 
         return idMap.entrySet().stream()
                 .map(entry -> {
-                    log.debug("[AI 하루 루틴 추천] 카테고리 = {}, content_id = {}", entry.getKey(), entry.getValue());
+                    log.debug("[하루 루틴 추천] 카테고리 = {}, content_id = {}", entry.getKey(), entry.getValue());
                     return routineContentRepository.findById(entry.getValue())
                             .orElseThrow(() -> {
-                                log.warn("[AI 하루 루틴 추천] 루틴 항목을 찾지 못했습니다. content_id = {}", entry.getValue());
+                                log.warn("[하루 루틴 추천] 루틴 항목을 찾지 못했습니다. content_id = {}", entry.getValue());
                                 return new CustomException(RoutineErrorCode.ROUTINE_CONTENT_NOT_FOUND);
                             });
                 })

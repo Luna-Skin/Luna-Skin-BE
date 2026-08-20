@@ -1,11 +1,71 @@
 package com.luna.skin.domain.user.controller;
 
+import com.luna.skin.domain.user.dto.request.UserSkinInfoUpdateRequest;
+import com.luna.skin.domain.user.dto.response.UserResponse;
+import com.luna.skin.domain.user.dto.response.UserSkinInfoResponse;
+import com.luna.skin.domain.user.dto.response.UserSkinProfileResponse;
+import com.luna.skin.domain.user.service.UserService;
+import com.luna.skin.global.response.BaseResponse;
+import com.luna.skin.global.security.CurrentUserProvider;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "User", description = "유저 API")
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/users/me")
 @RequiredArgsConstructor
 public class UserController {
+
+    private final UserService userService;
+    private final CurrentUserProvider currentUserProvider;
+
+    @Operation(summary = "유저 정보 조회", description = "마이페이지에서 사용자의 정보를 조회합니다.")
+    @GetMapping
+    public ResponseEntity<BaseResponse<UserResponse>> getUserInfo() {
+
+        UserResponse userInfo = userService
+                .getUserInfo(currentUserProvider.getCurrentUserId());
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(userInfo));
+    }
+
+
+    @Operation(summary = "피부 정보 조회", description = "사용자의 피부타입과 피부 고민을 조회합니다.")
+    @GetMapping("/skin")
+    public ResponseEntity<BaseResponse<UserSkinInfoResponse>> getSkinInfo() {
+        UserSkinInfoResponse skinInfo = userService
+                .getSkinInfo(currentUserProvider.getCurrentUserId());
+
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(BaseResponse.success(skinInfo));
+    }
+
+    @Operation(summary = "홈 헤더 프로필 조회", description = "홈 화면 헤더에서 사용자 이름과 선택된 피부 태그를 조회합니다.")
+    @GetMapping("/skin-profile")
+    public ResponseEntity<BaseResponse<UserSkinProfileResponse>> getSkinProfile() {
+        UserSkinProfileResponse response = userService
+                .getSkinProfile(currentUserProvider.getCurrentUserId());
+        return ResponseEntity.status(HttpStatus.OK)
+                .body(BaseResponse.success(response));
+    }
+
+    @Operation(summary = "피부 정보 수정", description = "사용자의 피부 타입과 피부 고민을 수정합니다.")
+    @PatchMapping("/skin")
+    public ResponseEntity<BaseResponse<Void>> updateSkinInfo(
+            @RequestBody @Valid UserSkinInfoUpdateRequest request) {
+
+        userService.updateSkinInfo(currentUserProvider.getCurrentUserId(), request);
+        return ResponseEntity.ok(BaseResponse.success(null));
+    }
 }

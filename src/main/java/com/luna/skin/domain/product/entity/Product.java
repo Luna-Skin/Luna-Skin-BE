@@ -19,12 +19,9 @@ public class Product extends BaseTimeEntity {
     @Column(name = "prod_name", length = 100)
     private String prodName;
 
-    @Column(name = "purpose", length = 50)
-    private String purpose;
+    @Column(name = "ingredient", length = 50)
+    private String ingredient;
 
-    @Column(name = "price")
-    private Integer price;
-
-    @Column(name = "image_url")
-    private String imageUrl;
+    @Column(name = "purchase_url", length = 500)
+    private String purchaseUrl;
 }

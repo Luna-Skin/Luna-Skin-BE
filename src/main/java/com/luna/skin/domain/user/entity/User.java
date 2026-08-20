@@ -2,13 +2,14 @@ package com.luna.skin.domain.user.entity;
 
 import com.luna.skin.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 @Entity
 @Table(name = "users")
 @Getter
-@NoArgsConstructor
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PROTECTED)
+@Builder(access = AccessLevel.PROTECTED)
 public class User extends BaseTimeEntity {
 
     @Id
@@ -33,6 +34,9 @@ public class User extends BaseTimeEntity {
 
     @Column(name = "default_cycle_length", nullable = false)
     private Integer defaultCycleLength = 28;
+
+    @Column(name = "profile_image_url", length = 500)
+    private String profileImageUrl;
 
     public void updateCycleSettings(int periodDuration, int cycleLength) {
         this.defaultPeriodDuration = periodDuration;

@@ -1,5 +1,6 @@
 package com.luna.skin.domain.cycle.controller;
 
+import com.luna.skin.domain.cycle.dto.request.CycleInfoUpdateRequest;
 import com.luna.skin.domain.cycle.dto.response.CycleAndAnalysisDateResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleCommentResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleInfoResponse;
@@ -9,6 +10,7 @@ import com.luna.skin.global.security.CurrentUserProvider;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -90,6 +92,18 @@ public class CycleController {
         return ResponseEntity
                 .status(HttpStatus.OK)
                 .body(BaseResponse.success(cycleInfo));
+    }
+
+    @Operation(summary = "사용자의 주기 정보를 수정합니다.", description = "사용자가 설정한 주기 길이, 월경 길이를 수정합니다.")
+    @PatchMapping("/info")
+    public ResponseEntity<BaseResponse<Void>> changeCycleInfo(
+            @RequestBody @Valid CycleInfoUpdateRequest request
+            ) {
+        cycleService.changeCycleInfo(currentUserProvider.getCurrentUserId(), request);
+
+        return ResponseEntity
+                .status(HttpStatus.OK)
+                .body(BaseResponse.success(null));
     }
 
 

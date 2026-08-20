@@ -2,6 +2,7 @@ package com.luna.skin.domain.cycle.service;
 
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.analysis.repository.AiAnalysisRepository;
+import com.luna.skin.domain.cycle.dto.request.CycleInfoUpdateRequest;
 import com.luna.skin.domain.cycle.dto.response.CycleAndAnalysisDateResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleCommentResponse;
 import com.luna.skin.domain.cycle.dto.response.CycleInfoResponse;
@@ -12,6 +13,9 @@ import com.luna.skin.domain.cycle.enums.PhaseType;
 import com.luna.skin.domain.cycle.exception.CycleErrorCode;
 import com.luna.skin.domain.cycle.repository.CyclePhaseRepository;
 import com.luna.skin.domain.cycle.repository.MenstruationCycleRepository;
+import com.luna.skin.domain.routine.dto.response.AiDailyRoutineResponse;
+import com.luna.skin.domain.routine.entity.AiDailyRoutine;
+import com.luna.skin.domain.routine.repository.AiDailyRoutineRepository;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.domain.user.exception.UserErrorCode;
 import com.luna.skin.domain.user.repository.UserRepository;
@@ -41,6 +45,8 @@ public class CycleService {
     private final MenstruationCycleRepository menstruationCycleRepository;
     private final UserRepository userRepository;
     private final AiAnalysisRepository aiAnalysisRepository;
+    private final AiDailyRoutineRepository aiDailyRoutineRepository;
+    private final CyclePhasePredictor cyclePhasePredictor;
 
 
     public CycleAndAnalysisDateResponse getCyclePhaseAtMonth(Long currentUserId, int year, int month) {
@@ -162,23 +168,8 @@ public class CycleService {
                     return new CustomException(CycleErrorCode.CYCLE_NOT_FOUND);
                 });
 
-        int cycleLength = lastCycle.getUser().getDefaultCycleLength();
-        int periodDuration = lastCycle.getUser().getDefaultPeriodDuration();
-        int ovulationOffset = cycleLength / 2 - 1;
-
-        int daysIntoCycle = (int) ChronoUnit.DAYS
-                .between(lastCycle.getCycleStartDate(), now) % cycleLength;
-
-        PhaseType predictedPhase;
-        if (daysIntoCycle < periodDuration) {
-            predictedPhase = PhaseType.MENSTRUATION;
-        } else if (daysIntoCycle < ovulationOffset) {
-            predictedPhase = PhaseType.FOLLICULAR;
-        } else if (daysIntoCycle <= ovulationOffset + 2) {
-            predictedPhase = PhaseType.OVULATION;
-        } else {
-            predictedPhase = PhaseType.LUTEAL;
-        }
+        // 예측 단계 반환
+        PhaseType predictedPhase = cyclePhasePredictor.predict(lastCycle, now).getPhaseType();
 
         return CycleCommentResponse.ofPredicted(predictedPhase);
     }
@@ -216,7 +207,19 @@ public class CycleService {
 
         // 기존에 있던 주기의 시작일을 변경 하는 경우
         if(targetMenstruation.isPresent()) {
+
+            // 기존 주기 조회
             MenstruationCycle menstruationCycle = targetMenstruation.get();
+
+            // 기존 주기의 생리 종료일
+            LocalDate existingMenstruationEnd = menstruationCycle.getCycleStartDate()
+                    .plusDays(menstruationCycle.getPeriodDuration() - 1);
+
+            // 시작일 = 종료일 체크
+            if (!startDate.isBefore(existingMenstruationEnd)) {
+                log.warn("[생리 시작일 기록] 시작일과 종료일은 같을 수 없습니다. startDate = {}", startDate);
+                throw new CustomException(CycleErrorCode.START_AND_END_DATE_CANNOT_BE_SAME);
+            }
 
             // 시작일 갱신
             menstruationCycle.updateStartDate(startDate);
@@ -234,9 +237,18 @@ public class CycleService {
                         cyclePhaseRepository.deleteAllByMenstruationCycle(prevCycle);
                         cyclePhaseRepository.saveAll(CyclePhase.of(prevCycle));
                     });
+
+            // 기존 주기의 시작일 업데이트
+            cyclePhaseRepository.deleteAllByMenstruationCycle(menstruationCycle);
+            cyclePhaseRepository.saveAll(CyclePhase.of(menstruationCycle));
+
+            // 시작일 변동시 오늘 데일리 루틴도 지움
+            aiDailyRoutineRepository.deleteByUserIdAndTargetDate(currentUserId, LocalDate.now());
+
             return;
         }
 
+        // 새로운 주기를 만드는 경우
 
         // 새로운 주기와 이전 주기의 차이( lastCycle의 실 주기 )
         int actualCycleLength = (int) ChronoUnit.DAYS
@@ -260,6 +272,9 @@ public class CycleService {
         // 저장
         menstruationCycleRepository.save(newCycle);
         cyclePhaseRepository.saveAll(CyclePhase.of(newCycle));
+
+        // 오늘 생성된 데일리 루틴도 지움
+        aiDailyRoutineRepository.deleteByUserIdAndTargetDate(currentUserId, LocalDate.now());
     }
 
     @CacheEvict(value = "cycleDetail", key = "#currentUserId")
@@ -288,10 +303,13 @@ public class CycleService {
         }
 
         // 종료일 갱신으로 인한 생리기간 업데이트
-        targetMenstruation.updatePeriodDuration(endDate);
+        targetMenstruation.updateEndDate(endDate);
         // 주기 단계 갱신
         cyclePhaseRepository.deleteAllByMenstruationCycle(targetMenstruation);
         cyclePhaseRepository.saveAll(CyclePhase.of(targetMenstruation));
+
+        // 종료 변동시 오늘 데일리 루틴도 지움
+        aiDailyRoutineRepository.deleteByUserIdAndTargetDate(currentUserId, LocalDate.now());
     }
 
     public CycleInfoResponse getCycleInfo(Long currentUserId) {
@@ -305,5 +323,25 @@ public class CycleService {
                 });
 
         return CycleInfoResponse.from(user);
+    }
+
+    @Transactional
+    public void changeCycleInfo(Long currentUserId, CycleInfoUpdateRequest request) {
+
+        log.info("[생리정보수정] currentUserId = {}, duration = {}, cycleLength = {}", currentUserId, request.getPeriodDuration(), request.getCycleLength());
+
+        // 생리 기간은 주기보단 짧아야 함.
+        if(request.getCycleLength() < request.getPeriodDuration()) {
+            throw new CustomException(CycleErrorCode.INVALID_CYCLE_PERIOD_RANGE);
+        }
+
+        User user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> {
+                    log.warn("[생리정보수정] 해당 유저를 찾을 수 없습니다,currentUserId = {}", currentUserId);
+                    return new CustomException(UserErrorCode.USER_NOT_FOUND);
+                });
+
+        // 주기, 기간 업데이트
+        user.updateCycleSettings(request.getPeriodDuration(), request.getCycleLength());
     }
 }

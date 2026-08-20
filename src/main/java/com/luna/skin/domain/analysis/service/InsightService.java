@@ -12,7 +12,7 @@ import com.luna.skin.domain.cycle.entity.MenstruationCycle;
 import com.luna.skin.domain.cycle.enums.PhaseType;
 import com.luna.skin.domain.cycle.repository.CyclePhaseRepository;
 import com.luna.skin.domain.cycle.repository.MenstruationCycleRepository;
-import com.luna.skin.domain.skin.enums.ExerciseTime;
+import com.luna.skin.domain.skin.entity.TodaySkin;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalDouble;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -52,7 +51,11 @@ public class InsightService {
    * 생리 시작일 기준 D-14 ~ D+14 구간의 트러블 점수를 누적 평균으로 계산하여
    * 주기별 트러블 패턴과 집중 구간(peak)을 반환한다.
    *
-   * - 미관측 날짜는 null 처리 (0점 포함 시 평균 왜곡 방지)
+   * - AI가 주는 trouble 원점수는 "높을수록 건강함"(0개=100점)이라, 트러블이 심한 정도를 보여주는
+   *   troubleIndex는 (100 - trouble)로 뒤집어서 계산한다 (값이 높을수록 트러블이 심함).
+   * - 매일 기록을 전제로 하지 않으므로, 기록 없는 날은 앞뒤 가장 가까운 실측값 사이를
+   *   선형보간해서 채운다 (고정 윈도우 평균이 아니라 실제 데이터 점을 매끄럽게 잇는 방식).
+   * - 실측값이 있는 양쪽 끝 바깥(보간 불가 구간)은 null 처리 (0점 포함 시 평균 왜곡 방지)
    * - 전체 평균 초과 구간 중 가장 긴 연속 구간을 peak로 판정
    * - 결과는 캐싱되며 새 분석 저장 시 evict
    *
@@ -83,7 +86,8 @@ public class InsightService {
       for (int d = -14; d <= 14; d++) {
         DetailedSkinAnalysis detail = detailByDate.get(startDate.plusDays(d));
         if (detail != null && detail.getTrouble() != null) {
-          troubleByDay.get(d).add(detail.getTrouble());
+          // AI가 주는 trouble 원점수는 "높을수록 건강함"이라, 트러블이 심한 정도로 보여주려면 뒤집어야 함
+          troubleByDay.get(d).add(100 - detail.getTrouble());
         }
       }
     }
@@ -116,6 +120,8 @@ public class InsightService {
    * 누적 평균을 계산하여 반환한다.
    *
    * - FOLLICULAR(여포기) 제외 — 분석 의미 있는 3단계만 대상
+   * - trouble/sebum/dullness는 AI 원점수(높을수록 좋음)를 (100 - 점수)로 뒤집어서 "심한 정도"로 반환.
+   *   moisture/elasticity는 원래부터 높을수록 좋은 의미라 그대로 반환.
    * - 전체 phase 날짜 범위를 한 번에 조회하여 N+1 방지
    * - 데이터 없는 메트릭은 null 반환
    *
@@ -164,11 +170,16 @@ public class InsightService {
 
   /**
    * [생활습관 영향 분석 조회]
-   * 수면 / 수분 / 운동 / 식단 조건별로 양호군과 불량군의 피부 측정값 평균을 비교하여
-   * 유의미한 차이가 있는 항목만 영향 요인으로 반환한다.
+   * 생활습관이 하나라도 기록된 가장 최근 분석을 "오늘"로 잡고(진짜 최신 기록이라도 습관 입력이
+   * 아예 없으면 건너뜀), 그 이전 전체 기록의 평균("baseline")과 비교해서 baseline보다 뚜렷하게
+   * (5 이상) 나빠지거나 좋아진 피부 지표를 찾는다. 트러블/건조도/칙칙함은 각각 최대 1개 factor로만
+   * 나가며, 그 지표에 매칭되는 습관은 오늘 그 지표 방향에 해당하는 습관들(나빠졌으면 오늘 기준치
+   * 미달 습관, 좋아졌으면 기준치 충족 습관) 중 이 유저의 과거 기록에서 그 지표와 가장 상관관계가
+   * 컸던(양호군·불량군 평균 차이가 가장 큰) 습관 하나로 고른다.
    *
-   * - 양쪽 그룹 중 한 쪽이라도 데이터 없으면 해당 요인 제외
-   * - 식단 null은 양호군/불량군 모두 제외 (통계 왜곡 방지)
+   * - 습관이 기록된 분석이 없으면(전부 미입력) 빈 배열
+   * - 비교할 과거 기록(baseline)이 없으면(분석이 1건 이하) 빈 배열
+   * - 지표가 뚜렷하게 변하지 않았거나, 매칭할 습관 근거가 없으면 그 지표는 factor로 안 나감
    * - 결과는 캐싱되며 새 분석 저장 시 evict
    *
    * @param userId 조회할 사용자 식별자
@@ -177,7 +188,18 @@ public class InsightService {
   @Cacheable(value = "lifestyleInsight", key = "#userId")
   public LifestyleInsightResponse getLifestyleInsight(Long userId) {
     List<AiAnalysis> analyses = aiAnalysisRepository.findAllByUserIdWithTodaySkin(userId);
-    if (analyses.isEmpty()) {
+    if (analyses.size() < 2) {
+      return LifestyleInsightResponse.builder().factors(List.of()).build();
+    }
+
+    // "오늘"은 생활습관이 하나라도 기록된 가장 최근 분석으로 잡는다.
+    // 진짜 최신 기록에 습관 입력이 아예 없으면(분석만 하고 습관은 안 채운 날) 매칭할 게 없으니,
+    // 습관이 있는 가장 최근 기록으로 대신 비교한다.
+    AiAnalysis latest = analyses.stream()
+        .filter(a -> hasAnyHabitData(a.getTodaySkin()))
+        .max(Comparator.comparing(a -> a.getTodaySkin().getLogDate()))
+        .orElse(null);
+    if (latest == null) {
       return LifestyleInsightResponse.builder().factors(List.of()).build();
     }
 
@@ -185,33 +207,102 @@ public class InsightService {
         .findAllByAiAnalysisIn(analyses).stream()
         .collect(Collectors.toMap(d -> d.getAiAnalysis().getAnalysisId(), d -> d));
 
+    DetailedSkinAnalysis latestDetail = detailMap.get(latest.getAnalysisId());
+    if (latestDetail == null) {
+      return LifestyleInsightResponse.builder().factors(List.of()).build();
+    }
+
+    List<AiAnalysis> pastAnalyses = analyses.stream()
+        .filter(a -> !a.getAnalysisId().equals(latest.getAnalysisId()))
+        .collect(Collectors.toList());
+
+    List<Habit> habits = List.of(
+        new Habit("수면 6시간 미만", "수면 6시간 이상",
+            a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() < 6,
+            a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() >= 6),
+        new Habit("수분 섭취 부족", "수분 충분 섭취",
+            a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() < 1.5,
+            a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() >= 1.5),
+        new Habit("운동 부족", "운동 충분",
+            a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() < 30,
+            a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() >= 30),
+        new Habit("자극적 식단", "자극적이지 않은 식단",
+            a -> hasBadFood(a.getTodaySkin().getDietType()),
+            a -> hasGoodFood(a.getTodaySkin().getDietType())));
+
+    // trouble/moisture/dullness는 전부 AI 원점수가 "높을수록 좋은 상태"라 lowerIsWorse=true
+    List<MetricSpec> metrics = List.of(
+        new MetricSpec(DetailedSkinAnalysis::getTrouble, true, "트러블 ↑", "트러블 ↓"),
+        new MetricSpec(DetailedSkinAnalysis::getMoisture, true, "건조도 ↑", "건조도 ↓"),
+        new MetricSpec(DetailedSkinAnalysis::getDullness, true, "칙칙함 ↑", "칙칙함 ↓"));
+
     List<LifestyleInsightResponse.LifestyleFactor> factors = new ArrayList<>();
+    for (MetricSpec metric : metrics) {
+      Integer todayValue = metric.extractor().apply(latestDetail);
+      if (todayValue == null) continue;
+      Optional<Double> baseline = avgMetric(pastAnalyses, detailMap, metric.extractor());
+      if (baseline.isEmpty()) continue;
 
-    addFactorIfSignificant(factors, analyses, detailMap,
-        a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() < 6,
-        a -> a.getTodaySkin().getSleepTime() != null && a.getTodaySkin().getSleepTime() >= 6,
-        DetailedSkinAnalysis::getTrouble,
-        "수면 6시간 미만", "트러블 ↑", "트러블 ↓");
-
-    addFactorIfSignificant(factors, analyses, detailMap,
-        a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() < 7,
-        a -> a.getTodaySkin().getWaterIntake() != null && a.getTodaySkin().getWaterIntake() >= 7,
-        DetailedSkinAnalysis::getMoisture,
-        "수분 섭취 부족", "건조도 ↑", "건조도 ↓");
-
-    addFactorIfSignificant(factors, analyses, detailMap,
-        a -> a.getTodaySkin().getExerciseTime() == ExerciseTime.ZERO_M,
-        a -> a.getTodaySkin().getExerciseTime() != null && a.getTodaySkin().getExerciseTime() != ExerciseTime.ZERO_M,
-        DetailedSkinAnalysis::getDullness,
-        "운동 부족", "칙칙함 ↑", "칙칙함 ↓");
-
-    addFactorIfSignificant(factors, analyses, detailMap,
-        a -> hasBadFood(a.getTodaySkin().getDietType()),
-        a -> hasGoodFood(a.getTodaySkin().getDietType()),
-        DetailedSkinAnalysis::getTrouble,
-        "자극적 식단", "트러블 ↑", "트러블 ↓");
+      double diff = metric.lowerIsWorse() ? baseline.get() - todayValue : todayValue - baseline.get(); // 양수 = 나빠짐
+      if (diff > SIMILAR_THRESHOLD) {
+        matchHabit(habits, h -> h.isBad().test(latest), pastAnalyses, detailMap, metric)
+            .ifPresent(h -> factors.add(factor(h.badCondition(), "negative", metric.worsenedLabel())));
+      } else if (diff < -SIMILAR_THRESHOLD) {
+        matchHabit(habits, h -> h.isGood().test(latest), pastAnalyses, detailMap, metric)
+            .ifPresent(h -> factors.add(factor(h.goodCondition(), "positive", metric.improvedLabel())));
+      }
+    }
 
     return LifestyleInsightResponse.builder().factors(factors).build();
+  }
+
+  private record Habit(String badCondition, String goodCondition,
+      Predicate<AiAnalysis> isBad, Predicate<AiAnalysis> isGood) {}
+
+  private record MetricSpec(Function<DetailedSkinAnalysis, Integer> extractor, boolean lowerIsWorse,
+      String worsenedLabel, String improvedLabel) {}
+
+  /**
+   * 오늘 그 방향(나쁨/좋음)에 해당하는 습관들 중, 과거 기록에서 이 지표와 가장 상관관계가 컸던
+   * (양호군·불량군 평균 차이가 가장 큰) 습관 하나를 고른다. 오늘 해당하는 습관이 없거나, 과거
+   * 데이터가 부족해 상관관계를 계산할 수 없으면 빈 값을 반환한다.
+   */
+  private Optional<Habit> matchHabit(List<Habit> habits, Predicate<Habit> todayCondition,
+      List<AiAnalysis> pastAnalyses, Map<Long, DetailedSkinAnalysis> detailMap, MetricSpec metric) {
+    Habit best = null;
+    double bestScore = Double.NEGATIVE_INFINITY;
+    for (Habit habit : habits) {
+      if (!todayCondition.test(habit)) continue;
+      Optional<Double> badAvg = avgMetric(pastAnalyses.stream().filter(habit.isBad()).collect(Collectors.toList()), detailMap, metric.extractor());
+      Optional<Double> goodAvg = avgMetric(pastAnalyses.stream().filter(habit.isGood()).collect(Collectors.toList()), detailMap, metric.extractor());
+      if (badAvg.isEmpty() || goodAvg.isEmpty()) continue;
+      double score = metric.lowerIsWorse() ? goodAvg.get() - badAvg.get() : badAvg.get() - goodAvg.get();
+      if (score > bestScore) {
+        bestScore = score;
+        best = habit;
+      }
+    }
+    return Optional.ofNullable(best);
+  }
+
+  private Optional<Double> avgMetric(List<AiAnalysis> list, Map<Long, DetailedSkinAnalysis> detailMap,
+      Function<DetailedSkinAnalysis, Integer> getter) {
+    return list.stream()
+        .map(a -> detailMap.get(a.getAnalysisId()))
+        .filter(Objects::nonNull)
+        .map(getter)
+        .filter(Objects::nonNull)
+        .mapToInt(Integer::intValue)
+        .average()
+        .stream().boxed().findFirst();
+  }
+
+  private LifestyleInsightResponse.LifestyleFactor factor(String condition, String impactType, String impactLabel) {
+    return LifestyleInsightResponse.LifestyleFactor.builder()
+        .condition(condition)
+        .impactType(impactType)
+        .impactLabel(impactLabel)
+        .build();
   }
 
   // ======================== Calculations ========================
@@ -223,14 +314,64 @@ public class InsightService {
         .collect(Collectors.toMap(d -> d.getAiAnalysis().getTodaySkin().getLogDate(), d -> d));
   }
 
+  // 트러블 타임라인 이동평균 반경 (매일 기록을 안 하는 유저가 많아 특정 하루 값만 보면 들쭉날쭉해짐)
+  /**
+   * 정확히 그 날짜에 기록이 있는 날만 실측 평균을 쓰고, 기록이 없는 날은 앞뒤로 가장 가까운
+   * 실측값 사이를 선형보간(linear interpolation)해서 채운다. 고정 윈도우로 뭉뚱그려 평균내는
+   * 대신 실제 데이터 점들을 매끄럽게 이어주는 방식이라, 데이터가 드문드문 있어도 급격히
+   * 꺾이지 않는 곡선이 나온다.
+   */
   private List<TroubleTimelineResponse.TroublePoint> buildTimeline(Map<Integer, List<Integer>> troubleByDay) {
-    List<TroubleTimelineResponse.TroublePoint> timeline = new ArrayList<>();
+    Double[] daily = new Double[29]; // index 0 => D-14 ... index 28 => D+14
     for (int d = -14; d <= 14; d++) {
       List<Integer> scores = troubleByDay.get(d);
-      Double avg = scores.isEmpty() ? null : scores.stream().mapToInt(Integer::intValue).average().orElse(0);
-      timeline.add(TroubleTimelineResponse.TroublePoint.builder().dayFromStart(d).troubleIndex(avg).build());
+      daily[d + 14] = scores.isEmpty() ? null : scores.stream().mapToInt(Integer::intValue).average().orElse(0);
+    }
+
+    Double[] interpolated = interpolateGaps(daily);
+
+    List<TroubleTimelineResponse.TroublePoint> timeline = new ArrayList<>();
+    for (int i = 0; i < interpolated.length; i++) {
+      timeline.add(TroubleTimelineResponse.TroublePoint.builder()
+          .dayFromStart(i - 14)
+          .troubleIndex(interpolated[i])
+          .build());
     }
     return timeline;
+  }
+
+  /**
+   * null 구간을 양옆 가장 가까운 실측값 사이의 선형보간으로 채운다.
+   * 한쪽에만 실측값이 있으면 그 값으로 평평하게 채우고, 양쪽 다 없으면 null 그대로 둔다.
+   */
+  private Double[] interpolateGaps(Double[] values) {
+    Double[] result = values.clone();
+    int n = result.length;
+    int i = 0;
+    while (i < n) {
+      if (result[i] != null) {
+        i++;
+        continue;
+      }
+      int start = i - 1; // 갭 이전 실측 인덱스 (-1이면 없음)
+      int end = i;
+      while (end < n && result[end] == null) end++; // 갭 이후 실측 인덱스 (n이면 없음)
+
+      if (start >= 0 && end < n) {
+        double startVal = result[start], endVal = result[end];
+        int gapLen = end - start;
+        for (int k = i; k < end; k++) {
+          double t = (double) (k - start) / gapLen;
+          result[k] = startVal + (endVal - startVal) * t;
+        }
+      } else if (start >= 0) {
+        for (int k = i; k < end; k++) result[k] = result[start];
+      } else if (end < n) {
+        for (int k = i; k < end; k++) result[k] = result[end];
+      }
+      i = end;
+    }
+    return result;
   }
 
   private double calcOverallAvg(List<TroubleTimelineResponse.TroublePoint> timeline) {
@@ -261,13 +402,19 @@ public class InsightService {
   }
 
   private CycleDetailResponse.Metrics toAverageMetrics(List<DetailedSkinAnalysis> details) {
+    // trouble/sebum/dullness는 AI 원점수(높을수록 좋음)를 그대로 노출하지 않고, "심한 정도"로 뒤집어서 보여준다.
+    // moisture/elasticity는 원래부터 높을수록 좋은 의미라 그대로 노출한다.
     return CycleDetailResponse.Metrics.builder()
-        .trouble(roundToInt(avgMetricValue(details, d -> d.getTrouble() != null ? d.getTrouble().doubleValue() : null)))
-        .sebum(roundToInt(avgMetricValue(details, d -> d.getSebum() != null ? d.getSebum().doubleValue() : null)))
-        .dullness(roundToInt(avgMetricValue(details, d -> d.getDullness() != null ? d.getDullness().doubleValue() : null)))
+        .trouble(invertScore(roundToInt(avgMetricValue(details, d -> d.getTrouble() != null ? d.getTrouble().doubleValue() : null))))
+        .sebum(invertScore(roundToInt(avgMetricValue(details, d -> d.getSebum() != null ? d.getSebum().doubleValue() : null))))
+        .dullness(invertScore(roundToInt(avgMetricValue(details, d -> d.getDullness() != null ? d.getDullness().doubleValue() : null))))
         .moisture(roundToInt(avgMetricValue(details, d -> d.getMoisture() != null ? d.getMoisture().doubleValue() : null)))
         .elasticity(roundToInt(avgMetricValue(details, d -> d.getElasticity() != null ? d.getElasticity().doubleValue() : null)))
         .build();
+  }
+
+  private Integer invertScore(Integer score) {
+    return score != null ? 100 - score : null;
   }
 
   private String phaseLabel(PhaseType pt) {
@@ -289,40 +436,16 @@ public class InsightService {
     return Arrays.stream(diet.split(",")).noneMatch(BAD_FOODS::contains);
   }
 
-  private void addFactorIfSignificant(
-      List<LifestyleInsightResponse.LifestyleFactor> factors,
-      List<AiAnalysis> analyses,
-      Map<Long, DetailedSkinAnalysis> detailMap,
-      Predicate<AiAnalysis> badCondition,
-      Predicate<AiAnalysis> goodCondition,
-      Function<DetailedSkinAnalysis, Integer> metric,
-      String condition,
-      String negativeLabel,
-      String positiveLabel) {
-
-    Optional<Double> badAvg = avgMetric(analyses.stream().filter(badCondition).collect(Collectors.toList()), detailMap, metric);
-    Optional<Double> goodAvg = avgMetric(analyses.stream().filter(goodCondition).collect(Collectors.toList()), detailMap, metric);
-
-    if (badAvg.isEmpty() || goodAvg.isEmpty() || badAvg.get().equals(goodAvg.get())) return;
-
-    factors.add(LifestyleInsightResponse.LifestyleFactor.builder()
-        .condition(condition)
-        .impactType(badAvg.get() > goodAvg.get() ? "negative" : "positive")
-        .impactLabel(badAvg.get() > goodAvg.get() ? negativeLabel : positiveLabel)
-        .build());
+  /** 수면/수분/운동/식단 중 하나라도 기록돼 있는지 */
+  private boolean hasAnyHabitData(TodaySkin todaySkin) {
+    return todaySkin.getSleepTime() != null
+        || todaySkin.getWaterIntake() != null
+        || todaySkin.getExerciseTime() != null
+        || todaySkin.getDietType() != null;
   }
 
-  private Optional<Double> avgMetric(List<AiAnalysis> list, Map<Long, DetailedSkinAnalysis> detailMap,
-      Function<DetailedSkinAnalysis, Integer> getter) {
-    OptionalDouble result = list.stream()
-        .map(a -> detailMap.get(a.getAnalysisId()))
-        .filter(Objects::nonNull)
-        .map(getter)
-        .filter(Objects::nonNull)
-        .mapToInt(Integer::intValue)
-        .average();
-    return result.isPresent() ? Optional.of(result.getAsDouble()) : Optional.empty();
-  }
+  // baseline 대비 오늘 값이 이 이상 나빠지거나 좋아지면 "뚜렷한 변화"로 판단 (AnalysisService.calcChange와 동일 기준)
+  private static final int SIMILAR_THRESHOLD = 5;
 
   private Double avgMetricValue(List<DetailedSkinAnalysis> details, Function<DetailedSkinAnalysis, Double> extractor) {
     return details.stream()

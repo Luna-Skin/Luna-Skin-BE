@@ -4,6 +4,7 @@ import com.luna.skin.domain.analysis.dto.request.SkinAnalysisRequest;
 import com.luna.skin.domain.analysis.dto.response.HomeSkinStatusResponse;
 import com.luna.skin.domain.analysis.dto.response.ImageUploadResponse;
 import com.luna.skin.domain.analysis.dto.response.SkinAnalysisResponse;
+import com.luna.skin.domain.analysis.dto.response.SkinCompareResponse;
 import com.luna.skin.domain.analysis.entity.AiAnalysis;
 import com.luna.skin.domain.analysis.entity.DetailedSkinAnalysis;
 import com.luna.skin.domain.analysis.enums.SkinStatusLabel;
@@ -13,6 +14,7 @@ import com.luna.skin.domain.analysis.repository.DetailedSkinAnalysisRepository;
 import com.luna.skin.domain.cycle.entity.CyclePhase;
 import com.luna.skin.domain.cycle.repository.CyclePhaseRepository;
 import com.luna.skin.domain.skin.entity.TodaySkin;
+import com.luna.skin.domain.skin.enums.SkinStatus;
 import com.luna.skin.domain.skin.repository.TodaySkinRepository;
 import com.luna.skin.domain.user.entity.User;
 import com.luna.skin.domain.user.repository.UserRepository;
@@ -54,12 +56,23 @@ public class AnalysisService {
   @Lazy
   private AnalysisService self;
 
-  public ImageUploadResponse uploadImage(Long userId, MultipartFile image) {
+  public ImageUploadResponse uploadImages(Long userId, MultipartFile image,
+      MultipartFile leftImage, MultipartFile rightImage) {
     validateImageFile(image);
+    if (leftImage != null && !leftImage.isEmpty()) validateImageFile(leftImage);
+    if (rightImage != null && !rightImage.isEmpty()) validateImageFile(rightImage);
     log.info("userId: {} 사진 업로드", userId);
+
     String imageUrl = imageStorageService.store(image, "analysis");
+    String leftImageUrl = leftImage != null && !leftImage.isEmpty()
+        ? imageStorageService.store(leftImage, "analysis") : null;
+    String rightImageUrl = rightImage != null && !rightImage.isEmpty()
+        ? imageStorageService.store(rightImage, "analysis") : null;
+
     return ImageUploadResponse.builder()
         .imageUrl(imageUrl)
+        .leftImageUrl(leftImageUrl)
+        .rightImageUrl(rightImageUrl)
         .build();
   }
 
@@ -79,9 +92,12 @@ public class AnalysisService {
     OpenAiSkinAnalysisResult gptResult;
     try {
       gptResult = openAiAnalysisService.analyzeSkin(
-          request.getImageUrl(), reservation.phaseType(), storageProperties.baseDir());
+          request.getImageUrl(),
+          request.getLeftImageUrl(),
+          request.getRightImageUrl(),
+          reservation.phaseType());
     } catch (RuntimeException e) {
-      self.cancelReservation(reservation.todaySkinId());
+      self.cancelReservation(reservation);
       throw e;
     }
 
@@ -90,44 +106,79 @@ public class AnalysisService {
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public ReservationResult reserveTodaySkin(Long userId, LocalDate date, SkinAnalysisRequest request) {
-    if (todaySkinRepository.findByUserUserIdAndLogDate(userId, date).isPresent()) {
-      throw new CustomException(AnalysisErrorCode.ALREADY_ANALYZED);
-    }
-
-    User user = userRepository.findById(userId)
-        .orElseThrow(() -> new CustomException(CommonErrorCode.NOT_FOUND));
-
-    String dietTypeStr = request.getDietType() == null ? null :
+    // dietType이 빈 리스트로 오면 ""가 되어 chk_diet_type 제약을 위반하므로 null로 처리
+    String dietTypeStr = request.getDietType() == null || request.getDietType().isEmpty() ? null :
         request.getDietType().stream()
             .map(Enum::name)
             .collect(Collectors.joining(","));
 
-    TodaySkin todaySkin = TodaySkin.builder()
-        .user(user)
-        .logDate(date)
-        .imageUrl(request.getImageUrl())
-        .sleepTime(request.getSleepTime())
-        .waterIntake(request.getWaterIntake())
-        .dietType(dietTypeStr)
-        .exerciseTime(request.getExerciseTime())
-        .skinStatus(request.getSkinStatus())
-        .build();
-    try {
-      todaySkinRepository.save(todaySkin);
-    } catch (DataIntegrityViolationException e) {
-      throw new CustomException(AnalysisErrorCode.ALREADY_ANALYZED);
+    // 같은 날짜에 이미 기록이 있으면 새로 만들지 않고 덮어쓴다
+    TodaySkin todaySkin = todaySkinRepository.findByUserUserIdAndLogDate(userId, date)
+        .orElse(null);
+    boolean isNewRecord = todaySkin == null;
+    // OpenAI 호출이 실패했을 때 되돌릴 수 있도록 덮어쓰기 전 값을 보존
+    TodaySkinSnapshot previousSnapshot = todaySkin != null ? TodaySkinSnapshot.of(todaySkin) : null;
+
+    if (todaySkin != null) {
+      todaySkin.update(request.getImageUrl(), request.getLeftImageUrl(), request.getRightImageUrl(),
+          request.getSleepTime(), request.getWaterIntake(), dietTypeStr,
+          request.getExerciseTime(), request.getSkinStatus());
+    } else {
+      User user = userRepository.findById(userId)
+          .orElseThrow(() -> new CustomException(CommonErrorCode.NOT_FOUND));
+
+      todaySkin = TodaySkin.builder()
+          .user(user)
+          .logDate(date)
+          .imageUrl(request.getImageUrl())
+          .leftImageUrl(request.getLeftImageUrl())
+          .rightImageUrl(request.getRightImageUrl())
+          .sleepTime(request.getSleepTime())
+          .waterIntake(request.getWaterIntake())
+          .dietType(dietTypeStr)
+          .exerciseTime(request.getExerciseTime())
+          .skinStatus(request.getSkinStatus())
+          .build();
+      try {
+        todaySkinRepository.save(todaySkin);
+      } catch (DataIntegrityViolationException e) {
+        // 동시 요청으로 유니크 제약을 동시에 통과한 경우: 방금 저장된 기록을 다시 조회해 덮어쓴다
+        if (e.getMessage() != null && e.getMessage().contains("uq_today_skin_user_date")) {
+          todaySkin = todaySkinRepository.findByUserUserIdAndLogDate(userId, date)
+              .orElseThrow(() -> e);
+          isNewRecord = false;
+          previousSnapshot = TodaySkinSnapshot.of(todaySkin);
+          todaySkin.update(request.getImageUrl(), request.getLeftImageUrl(), request.getRightImageUrl(),
+              request.getSleepTime(), request.getWaterIntake(), dietTypeStr,
+              request.getExerciseTime(), request.getSkinStatus());
+        } else {
+          throw e;
+        }
+      }
     }
 
     CyclePhase cyclePhase = cyclePhaseRepository.findByCyclePhaseAtNow(userId, date)
         .orElse(null);
     String phaseType = cyclePhase != null ? cyclePhase.getPhaseType().name() : "UNKNOWN";
 
-    return new ReservationResult(todaySkin.getTodaySkinId(), phaseType);
+    return new ReservationResult(todaySkin.getTodaySkinId(), phaseType, isNewRecord, previousSnapshot);
   }
 
+  /**
+   * OpenAI 호출 실패 시 예약을 되돌린다.
+   * 새로 만든 기록이면 삭제하고, 기존 기록을 덮어쓴 경우라면 덮어쓰기 전 값으로 복원한다.
+   */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
-  public void cancelReservation(Long todaySkinId) {
-    todaySkinRepository.deleteById(todaySkinId);
+  public void cancelReservation(ReservationResult reservation) {
+    if (reservation.isNewRecord()) {
+      todaySkinRepository.deleteById(reservation.todaySkinId());
+      return;
+    }
+    TodaySkin todaySkin = todaySkinRepository.getReferenceById(reservation.todaySkinId());
+    TodaySkinSnapshot snapshot = reservation.previousSnapshot();
+    todaySkin.update(snapshot.imageUrl(), snapshot.leftImageUrl(), snapshot.rightImageUrl(),
+        snapshot.sleepTime(), snapshot.waterIntake(), snapshot.dietType(),
+        snapshot.exerciseTime(), snapshot.skinStatus());
   }
 
   @CacheEvict(value = {"troubleTimeline", "cycleDetail", "lifestyleInsight"}, key = "#userId")
@@ -138,29 +189,55 @@ public class AnalysisService {
     TodaySkin todaySkin = todaySkinRepository.getReferenceById(todaySkinId);
     SkinStatusLabel skinStatusLabel = SkinStatusLabel.from(gptResult.getOverallScore());
 
-    AiAnalysis aiAnalysis = AiAnalysis.builder()
-        .todaySkin(todaySkin)
-        .overallScore(gptResult.getOverallScore())
-        .skinStatusLabel(skinStatusLabel)
-        .aiComment(gptResult.getAiComment())
-        .phaseComment(gptResult.getPhaseComment())
-        .build();
-    aiAnalysisRepository.save(aiAnalysis);
+    // 같은 today_skin에 이미 분석 결과가 있으면(재분석) 새로 만들지 않고 덮어쓴다
+    AiAnalysis aiAnalysis = aiAnalysisRepository.findByTodaySkin_TodaySkinId(todaySkinId)
+        .orElse(null);
+    if (aiAnalysis != null) {
+      aiAnalysis.update(gptResult.getOverallScore(), skinStatusLabel,
+          gptResult.getAiComment(), gptResult.getPhaseComment());
+    } else {
+      aiAnalysis = AiAnalysis.builder()
+          .todaySkin(todaySkin)
+          .overallScore(gptResult.getOverallScore())
+          .skinStatusLabel(skinStatusLabel)
+          .aiComment(gptResult.getAiComment())
+          .phaseComment(gptResult.getPhaseComment())
+          .build();
+      aiAnalysisRepository.save(aiAnalysis);
+    }
 
-    DetailedSkinAnalysis detail = DetailedSkinAnalysis.builder()
-        .aiAnalysis(aiAnalysis)
-        .trouble(gptResult.getTrouble())
-        .sebum(gptResult.getSebum())
-        .dullness(gptResult.getDullness())
-        .moisture(gptResult.getMoisture())
-        .elasticity(gptResult.getElasticity())
-        .build();
-    detailedSkinAnalysisRepository.save(detail);
+    DetailedSkinAnalysis detail = detailedSkinAnalysisRepository.findByAiAnalysis(aiAnalysis)
+        .orElse(null);
+    if (detail != null) {
+      detail.update(gptResult.getTrouble(), gptResult.getSebum(), gptResult.getDullness(),
+          gptResult.getMoisture(), gptResult.getElasticity());
+    } else {
+      detail = DetailedSkinAnalysis.builder()
+          .aiAnalysis(aiAnalysis)
+          .trouble(gptResult.getTrouble())
+          .sebum(gptResult.getSebum())
+          .dullness(gptResult.getDullness())
+          .moisture(gptResult.getMoisture())
+          .elasticity(gptResult.getElasticity())
+          .build();
+      detailedSkinAnalysisRepository.save(detail);
+    }
 
     return toSkinAnalysisResponse(aiAnalysis, detail, phaseType);
   }
 
-  private record ReservationResult(Long todaySkinId, String phaseType) {}
+  private record TodaySkinSnapshot(String imageUrl, String leftImageUrl, String rightImageUrl,
+      Double sleepTime, Double waterIntake, String dietType, Integer exerciseTime,
+      SkinStatus skinStatus) {
+    static TodaySkinSnapshot of(TodaySkin todaySkin) {
+      return new TodaySkinSnapshot(todaySkin.getImageUrl(), todaySkin.getLeftImageUrl(),
+          todaySkin.getRightImageUrl(), todaySkin.getSleepTime(), todaySkin.getWaterIntake(),
+          todaySkin.getDietType(), todaySkin.getExerciseTime(), todaySkin.getSkinStatus());
+    }
+  }
+
+  private record ReservationResult(Long todaySkinId, String phaseType, boolean isNewRecord,
+      TodaySkinSnapshot previousSnapshot) {}
 
   public SkinAnalysisResponse getAnalysisByDate(Long userId, LocalDate date) {
     AiAnalysis aiAnalysis = aiAnalysisRepository.findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, date)
@@ -189,6 +266,66 @@ public class AnalysisService {
             .build());
   }
 
+  public SkinCompareResponse compare(Long userId, LocalDate dateA, LocalDate dateB) {
+    AiAnalysis analysisA = aiAnalysisRepository
+        .findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, dateA)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+    AiAnalysis analysisB = aiAnalysisRepository
+        .findByTodaySkinUserUserIdAndTodaySkinLogDate(userId, dateB)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+
+    DetailedSkinAnalysis detailA = detailedSkinAnalysisRepository.findByAiAnalysis(analysisA)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+    DetailedSkinAnalysis detailB = detailedSkinAnalysisRepository.findByAiAnalysis(analysisB)
+        .orElseThrow(() -> new CustomException(AnalysisErrorCode.ANALYSIS_NOT_FOUND));
+
+    String aiComment = openAiAnalysisService.generateCompareComment(
+        analysisA.getOverallScore(), detailA.getTrouble(), detailA.getSebum(),
+        detailA.getDullness(), detailA.getMoisture(), detailA.getElasticity(),
+        analysisB.getOverallScore(), detailB.getTrouble(), detailB.getSebum(),
+        detailB.getDullness(), detailB.getMoisture(), detailB.getElasticity());
+
+    return SkinCompareResponse.builder()
+        .dateA(toSnapshot(analysisA, detailA))
+        .dateB(toSnapshot(analysisB, detailB))
+        .changes(toChanges(detailA, detailB))
+        .aiComment(aiComment)
+        .build();
+  }
+
+  private SkinCompareResponse.DaySnapshot toSnapshot(AiAnalysis analysis, DetailedSkinAnalysis detail) {
+    SkinStatusLabel label = analysis.getSkinStatusLabel();
+    return SkinCompareResponse.DaySnapshot.builder()
+        .date(analysis.getTodaySkin().getLogDate().toString())
+        .imageUrl(analysis.getTodaySkin().getImageUrl())
+        .overallScore(analysis.getOverallScore())
+        .skinStatus(label != null ? label.toLabel() : "모름")
+        .metrics(SkinCompareResponse.Metrics.builder()
+            .trouble(detail.getTrouble())
+            .sebum(detail.getSebum())
+            .dullness(detail.getDullness())
+            .moisture(detail.getMoisture())
+            .elasticity(detail.getElasticity())
+            .build())
+        .build();
+  }
+
+  private SkinCompareResponse.MetricChanges toChanges(DetailedSkinAnalysis a, DetailedSkinAnalysis b) {
+    return SkinCompareResponse.MetricChanges.builder()
+        .trouble(calcChange(a.getTrouble(), b.getTrouble()))
+        .sebum(calcChange(a.getSebum(), b.getSebum()))
+        .dullness(calcChange(a.getDullness(), b.getDullness()))
+        .moisture(calcChange(a.getMoisture(), b.getMoisture()))
+        .elasticity(calcChange(a.getElasticity(), b.getElasticity()))
+        .build();
+  }
+
+  private String calcChange(int before, int after) {
+    int diff = after - before;
+    if (Math.abs(diff) <= 5) return "SIMILAR";
+    return diff > 0 ? "IMPROVED" : "WORSENED";
+  }
+
   private void validateImageFile(MultipartFile image) {
     if (image == null || image.isEmpty()) {
       throw new CustomException(AnalysisErrorCode.EMPTY_FILE);
@@ -211,6 +348,8 @@ public class AnalysisService {
         .analysisId(aiAnalysis.getAnalysisId())
         .date(todaySkin.getLogDate().toString())
         .imageUrl(todaySkin.getImageUrl())
+        .leftImageUrl(todaySkin.getLeftImageUrl())
+        .rightImageUrl(todaySkin.getRightImageUrl())
         .overallScore(aiAnalysis.getOverallScore())
         .skinStatus(label != null ? label.toLabel() : "모름")
         .cyclePhase(phaseType)
